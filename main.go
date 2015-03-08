@@ -445,8 +445,8 @@ func (in *Input) setFest(db *sql.DB) {
 	}
 }
 
-func (in *Input) mainMenu(db *sql.DB) {
-	items := []string{"Cocktail erstellen [c]", "Inventar updaten [i]", "Festcocktails festlegen [f]", "Einkaufsliste erstellen [e]"}
+func (in *Input) mainMenu(db *sql.DB) error {
+	items := []string{"Cocktail erstellen [c]", "Inventar updaten [i]", "Festcocktails festlegen [f]", "Einkaufsliste erstellen [e]", "Beenden [q]"}
 	for _, i := range items {
 		fmt.Println(i)
 	}
@@ -467,7 +467,11 @@ func (in *Input) mainMenu(db *sql.DB) {
 		liste, preisliste := genShoppingList(db)
 		fmt.Println(liste)
 		fmt.Println(preisliste)
+	case c == "q":
+		return nil
 	}
+
+	return fmt.Errorf("Keinr valide Auswahl. Erneut versuchen")
 }
 
 func main() {
@@ -487,7 +491,13 @@ func main() {
 
 	in := NewInput(os.Stdin, os.Stdout)
 
-	in.mainMenu(db)
+	for {
+		err := in.mainMenu(db)
+		if err == nil {
+			return
+		}
+		fmt.Println(err)
+	}
 
 	//	createCocktail(db)
 	//	addInventory(db)

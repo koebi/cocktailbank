@@ -4,7 +4,7 @@ import (
 	"bufio"
 	"database/sql"
 	"fmt"
-	cconf "github.com/koebi/cocktailbank/config"
+	"github.com/BurntSushi/toml"
 	"io"
 	"log"
 	"os"
@@ -13,6 +13,11 @@ import (
 
 	_ "github.com/mattn/go-sqlite3"
 )
+
+type config struct {
+	Current string
+	Last    string
+}
 
 type cocktail struct {
 	name    string
@@ -335,9 +340,9 @@ func (in *Input) updatePrice(db *sql.DB) {
 	}
 }
 
-func getFest(db *sql.DB) fest {
+func getFest(db *sql.DB, cfg config) fest {
 	f := newFest()
-	f.datum = cconf.Current
+	f.datum = cfg.Current
 
 	rows, err := db.Query("SELECT cocktails, menge FROM feste WHERE datum = $1", f.datum)
 	if err != nil {
@@ -358,10 +363,10 @@ func getFest(db *sql.DB) fest {
 	return f
 }
 
-func genShoppingList(db *sql.DB) (map[string]float64, map[string]float64) {
+func genShoppingList(db *sql.DB, cfg config) (map[string]float64, map[string]float64) {
 	cocktails := getCocktails(db)
 	inventar := getInventory(db)
-	f := getFest(db)
+	f := getFest(db, cfg)
 
 	liste := make(map[string]float64)
 
@@ -409,7 +414,7 @@ func (in *Input) updateInventory(db *sql.DB) {
 	}
 }
 
-func (in *Input) setFest(db *sql.DB) {
+func (in *Input) setFest(db *sql.DB, cfg config) {
 	fmt.Println("Wähle Cocktails aus. Zur Verfügung stehen: ")
 
 	cocktails := getCocktails(db)
@@ -441,11 +446,11 @@ func (in *Input) setFest(db *sql.DB) {
 			log.Fatal(err)
 		}
 
-		stmt.Exec(cconf.Current, cocktails[id].name, preis, menge)
+		stmt.Exec(cfg.Current, cocktails[id].name, preis, menge)
 	}
 }
 
-func (in *Input) mainMenu(db *sql.DB) error {
+func (in *Input) mainMenu(db *sql.DB, cfg config) error {
 	items := []string{"Cocktail erstellen [c]", "Inventar updaten [i]", "Festcocktails festlegen [f]", "Einkaufsliste erstellen [e]", "Beenden [q]"}
 	for _, i := range items {
 		fmt.Println(i)
@@ -462,9 +467,9 @@ func (in *Input) mainMenu(db *sql.DB) error {
 	case c == "i":
 		in.updateInventory(db)
 	case c == "f":
-		in.setFest(db)
+		in.setFest(db, cfg)
 	case c == "e":
-		liste, preisliste := genShoppingList(db)
+		liste, preisliste := genShoppingList(db, cfg)
 		fmt.Println(liste)
 		fmt.Println(preisliste)
 	case c == "q":
@@ -476,6 +481,7 @@ func (in *Input) mainMenu(db *sql.DB) error {
 
 func main() {
 	var db *sql.DB
+	configLocation := "/home/koebi/go/src/github.com/koebi/cocktailbank/config.toml"
 
 	_, err := os.Stat("fest.db")
 	if os.IsNotExist(err) {
@@ -491,8 +497,14 @@ func main() {
 
 	in := NewInput(os.Stdin, os.Stdout)
 
+	var cfg config
+	if _, err := toml.Decode(configLocation, &cfg); err != nil {
+		fmt.Println("Config-File at location", configLocation, "not found, exiting")
+		return
+	}
+
 	for {
-		err := in.mainMenu(db)
+		err := in.mainMenu(db, cfg)
 		if err == nil {
 			return
 		}

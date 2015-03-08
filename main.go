@@ -29,37 +29,52 @@ func newFest() fest {
 	}
 }
 
-func getString(prompt string) (string, error) {
-	fmt.Printf(prompt)
-
-	s := bufio.NewScanner(os.Stdin)
-	if !s.Scan() {
-		return "", s.Err()
-	}
-	return strings.TrimSpace(s.Text()), nil
+type Input struct {
+	s *bufio.Scanner
+	w io.Writer
 }
 
-func getFloat(prompt string) (float64, error) {
-	fmt.Printf(prompt)
+func NewInput(r io.Reader, w io.Writer) *Input {
+	return input{
+		bufio.NewScanner(r),
+		w,
+	}
+}
 
-	s := bufio.NewScanner(os.Stdin)
-	if !s.Scan() {
-		return 0, s.Err()
+func (i *Input) GetString(prompt string) (string, error) {
+	fmt.FPrintln(i.w, prompt)
+
+	if !i.s.Scan() {
+		return "", i.s.Err()
+	}
+	return strings.TrimSpace(i.s.Text()), nil
+}
+
+func (i *Input) getFloat(prompt string) (float64, error) {
+	fmt.FPrintln(i.w, prompt)
+
+	if !i.s.Scan() {
+		return 0, i.s.Err()
 	}
 
-	f, err := strconv.ParseFloat(strings.TrimSpace(s.Text()), 64)
+	f, err := strconv.ParseFloat(strings.TrimSpace(i.s.Text()), 64)
+	if err != nil {
+		return 0, err
+	}
 	return f, err
 }
 
-func getInt(prompt string) (int, error) {
-	fmt.Printf(prompt)
+func (i *Input) getInt(prompt string) (int, error) {
+	fmt.FPrintln(i.w, prompt)
 
-	s := bufio.NewScanner(os.Stdin)
-	if !s.Scan() {
+	if !i.s.Scan() {
 		return 0, s.Err()
 	}
 
-	i, err := strconv.Atoi(strings.TrimSpace(s.Text()))
+	i, err := strconv.Atoi(strings.TrimSpace(i.s.Text()))
+	if err != nil {
+		return 0, err
+	}
 	return i, err
 }
 

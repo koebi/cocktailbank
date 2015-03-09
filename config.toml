@@ -1,5 +1,5 @@
 # config-file for cocktailbank
 
-[fest]
-	Current = "SS 15"
-	Last = "WS 14/15"
+Current = "SS 15"
+Last = "WS 14/15"
+Database = "/home/koebi/go/src/github.com/koebi/cocktailbank/fest.sqlite"

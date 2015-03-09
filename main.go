@@ -10,6 +10,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"text/tabwriter"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -102,12 +103,12 @@ func (in *input) getIngredients() (ingredients map[string]float64) {
 		if err != nil {
 			log.Fatal(err)
 		}
-		menge, err := in.getFloat("amount: ")
+		amount, err := in.getFloat("amount: ")
 		if err != nil {
 			log.Fatal(err)
 		}
 
-		ingredients[name] = menge
+		ingredients[name] = amount
 	}
 	return ingredients
 }
@@ -141,20 +142,20 @@ func (in *input) createCocktail(db *DB) {
 	}
 	rows.Close()
 
-	stmt, err := db.Prepare("INSERT INTO zutaten (name, menge, cocktail) values($1, $2, $3)")
+	stmt, err := db.Prepare("INSERT INTO ingredients (name, amount, cocktail) values($1, $2, $3)")
 	if err != nil {
-		log.Fatal("Preparing insertion into zutaten failed:", err)
+		log.Fatal("Preparing insertion into ingredients failed:", err)
 	}
 
-	st, err := db.Prepare("INSERT INTO inventar (name) values($1)")
+	st, err := db.Prepare("INSERT INTO inventory (name) values($1)")
 	if err != nil {
-		log.Fatal("Preparing insertion into inventar failed:", err)
+		log.Fatal("Preparing insertion into inventory failed:", err)
 	}
 
-	for zutat, menge := range c.ingredients {
-		_, err := stmt.Exec(zutat, menge, id)
+	for zutat, amount := range c.ingredients {
+		_, err := stmt.Exec(zutat, amount, id)
 		if err != nil {
-			log.Fatal("Inserting into Cocktailzutaten failed:", err)
+			log.Fatal("Inserting into Cocktailingredients failed:", err)
 		}
 
 		_, err = st.Exec(zutat)
@@ -176,17 +177,17 @@ func (db *DB) initDB() {
 		log.Fatal(err)
 	}
 
-	_, err = db.Exec("CREATE TABLE zutaten (name TEXT, menge FLOAT, cocktail INT);")
+	_, err = db.Exec("CREATE TABLE ingredients (name TEXT, amount FLOAT, cocktail INT);")
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	_, err = db.Exec("CREATE TABLE inventar (name TEXT UNIQUE ON CONFLICT IGNORE, vorhanden FLOAT DEFAULT 0.0, preis INTEGER DEFAULT 0);")
+	_, err = db.Exec("CREATE TABLE inventory (name TEXT UNIQUE ON CONFLICT IGNORE, available FLOAT DEFAULT 0.0, price INTEGER DEFAULT 0);")
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	_, err = db.Exec("CREATE TABLE feste (datum TEXT, cocktails INTEGER, preis INTEGER DEFAULT 0, menge INTEGER DEFAULT 0);")
+	_, err = db.Exec("CREATE TABLE fests (date TEXT, cocktails INTEGER, price INTEGER DEFAULT 0, amount INTEGER DEFAULT 0);")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -207,19 +208,19 @@ func (db *DB) cocktailIngredients(cocktail string) (ingredients map[string]float
 	}
 	rows.Close()
 
-	rows, err = db.Query("SELECT name, menge FROM zutaten WHERE cocktail = $1", id)
+	rows, err = db.Query("SELECT name, amount FROM ingredients WHERE cocktail = $1", id)
 	if err != nil {
-		log.Fatal("selecting from zutaten failed:", err)
+		log.Fatal("selecting from ingredients failed:", err)
 	}
 
 	ingredients = make(map[string]float64)
 	for rows.Next() {
 		var name string
-		var menge float64
-		if err := rows.Scan(&name, &menge); err != nil {
+		var amount float64
+		if err := rows.Scan(&name, &amount); err != nil {
 			log.Fatal("Scanning rows failed:", err)
 		}
-		ingredients[name] = menge
+		ingredients[name] = amount
 	}
 	rows.Close()
 
@@ -263,7 +264,7 @@ func (in *input) addInventory(db *DB) {
 		log.Fatal(err)
 	}
 
-	_, err = db.Exec("INSERT INTO inventar (name, vorhanden, preis) VALUES ($1, $2, $3)", name, avail, price)
+	_, err = db.Exec("INSERT INTO inventory (name, available, price) VALUES ($1, $2, $3)", name, avail, price)
 	if err != nil {
 		log.Fatal("Adding Inventory entry failed:", err)
 	}
@@ -272,7 +273,7 @@ func (in *input) addInventory(db *DB) {
 func (db *DB) getInventory() (inventory map[string]float64) {
 	inventory = make(map[string]float64)
 
-	rows, err := db.Query("SELECT name, vorhanden FROM inventar")
+	rows, err := db.Query("SELECT name, available FROM inventory")
 	if err != nil {
 		log.Fatal("selecting inventory failed", err)
 	}
@@ -294,7 +295,7 @@ func (db *DB) getInventory() (inventory map[string]float64) {
 func (db *DB) getInventoryPriceList() (prices map[string]float64) {
 	prices = make(map[string]float64)
 
-	rows, err := db.Query("SELECT name, preis FROM inventar")
+	rows, err := db.Query("SELECT name, price FROM inventory")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -322,7 +323,7 @@ func (in *input) updateAvailability(db *DB) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	_, err = db.Exec("UPDATE inventar SET vorhanden = $2 WHERE name = $1", name, avail)
+	_, err = db.Exec("UPDATE inventory SET available = $2 WHERE name = $1", name, avail)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -338,7 +339,7 @@ func (in *input) updatePrice(db *DB) {
 		log.Fatal(err)
 	}
 
-	_, err = db.Exec("UPDATE inventar SET price = $2 WHERE name = $1", name, price)
+	_, err = db.Exec("UPDATE inventory SET price = $2 WHERE name = $1", name, price)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -348,7 +349,7 @@ func (db *DB) getFest(cfg config) fest {
 	f := newFest()
 	f.date = cfg.Current
 
-	rows, err := db.Query("SELECT cocktails, menge FROM feste WHERE datum = $1", f.date)
+	rows, err := db.Query("SELECT cocktails, amount FROM fests WHERE date = $1", f.date)
 	if err != nil {
 		log.Fatal("selecting cocktails failed:", err)
 	}
@@ -369,7 +370,7 @@ func (db *DB) getFest(cfg config) fest {
 
 func (db *DB) genShoppingList(cfg config) (shoppinglist map[string]float64, pricelist map[string]float64) {
 	cocktails := db.getCocktails()
-	inventar := db.getInventory()
+	inventory := db.getInventory()
 	f := db.getFest(cfg)
 
 	shoppinglist = make(map[string]float64)
@@ -380,7 +381,7 @@ func (db *DB) genShoppingList(cfg config) (shoppinglist map[string]float64, pric
 		}
 	}
 
-	for z, m := range inventar {
+	for z, m := range inventory {
 		shoppinglist[z] -= m
 		if shoppinglist[z] <= 0 {
 			shoppinglist[z] = 0
@@ -430,7 +431,7 @@ func (in *input) setFest(db *DB, cfg config) {
 		log.Fatal(err)
 	}
 
-	stmt, err := db.Prepare("INSERT INTO feste (datum, cocktails, preis, menge) values ($1, $2, $3, $4)")
+	stmt, err := db.Prepare("INSERT INTO fests (date, cocktails, price, amount) values ($1, $2, $3, $4)")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -441,16 +442,16 @@ func (in *input) setFest(db *DB, cfg config) {
 			log.Fatal(err)
 		}
 
-		menge, err := in.getInt("How many %s are you planning for?", cocktails[id].name)
+		amount, err := in.getInt("How many %s are you planning for?", cocktails[id].name)
 		if err != nil {
 			log.Fatal(err)
 		}
-		preis, err := in.getFloat("What's the price for a %s?", cocktails[id].name)
+		price, err := in.getFloat("What's the price for a %s?", cocktails[id].name)
 		if err != nil {
 			log.Fatal(err)
 		}
 
-		stmt.Exec(cfg.Current, cocktails[id].name, preis, menge)
+		stmt.Exec(cfg.Current, cocktails[id].name, price, amount)
 	}
 }
 
@@ -474,16 +475,30 @@ func (in *input) mainMenu(db *DB, cfg config) error {
 		in.setFest(db, cfg)
 	case c == "g":
 		shoppinglist, pricelist := db.genShoppingList(cfg)
-		in.printLists(shoppinglist, pricelist)
+		printLists(shoppinglist, pricelist)
 	case c == "q":
 		return nil
 	default:
 		return fmt.Errorf("No valid choice, try again…")
 	}
+
+	return fmt.Errorf("control reached end of function mainMenu")
 }
 
-//TODO: implement this!
 func printLists(l1 map[string]float64, l2 map[string]float64) {
+	header := "ingredient\tamount\tprice"
+	//delimiter
+	d := "\t"
+
+	w := new(tabwriter.Writer)
+
+	w.Init(os.Stdout, 0, 8, 0, '\t', 0)
+	fmt.Println(w, header)
+
+	for i, j := range l1 {
+		fmt.Println(w, i, d, j, d, l2[i])
+	}
+	w.Flush()
 }
 
 func (db *DB) createOrOpenDB(database string) {

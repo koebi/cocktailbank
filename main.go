@@ -15,8 +15,9 @@ import (
 )
 
 type config struct {
-	Current string
-	Last    string
+	Current  string
+	Last     string
+	Database string
 }
 
 type cocktail struct {
@@ -482,31 +483,39 @@ func (in *input) mainMenu(db *DB, cfg config) error {
 	return fmt.Errorf("Keinr valide Auswahl. Erneut versuchen")
 }
 
-func main() {
-	var db *DB
-	configLocation := "/home/koebi/go/src/github.com/koebi/cocktailbank/config.toml"
-
-	_, err := os.Stat("fest.db")
+func (db *DB) createOrOpenDB(database string) {
+	_, err := os.Stat(database)
 	if os.IsNotExist(err) {
 		db.initDB()
 	} else if err != nil {
 		log.Fatal("Stat returned:", err)
 	} else {
-		tmp, err := sql.Open("sqlite3", "fest.db")
+		tmp, err := sql.Open("sqlite3", database)
 		db = &DB{tmp}
 		if err != nil {
 			log.Fatal("Opening Database Failed:", err)
 		}
 	}
+}
 
-	in := newInput(os.Stdin, os.Stdout)
+func main() {
 
+	//parsing config
+	configLocation := "/home/koebi/go/src/github.com/koebi/cocktailbank/config.toml"
 	var cfg config
 	if _, err := toml.Decode(configLocation, &cfg); err != nil {
 		fmt.Println("Config-File at location", configLocation, "not found, exiting")
 		return
 	}
 
+	//creating Input for user interaction
+	in := newInput(os.Stdin, os.Stdout)
+
+	//creating/opening database
+	var db *DB
+	db.createOrOpenDB(cfg.Database)
+
+	//main loop running the menu until quit.
 	for {
 		err := in.mainMenu(db, cfg)
 		if err == nil {

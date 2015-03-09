@@ -31,6 +31,8 @@ type fest struct {
 	cocktails map[string]float64
 }
 
+//TODO: implement type shoppinglist
+
 func newFest() fest {
 	return fest{
 		cocktails: make(map[string]float64),
@@ -486,17 +488,13 @@ func (in *input) mainMenu(db *DB, cfg config) error {
 }
 
 func printLists(l1 map[string]float64, l2 map[string]float64) {
-	header := "ingredient\tamount\tprice"
-	//delimiter
-	d := "\t"
-
 	w := new(tabwriter.Writer)
 
 	w.Init(os.Stdout, 0, 8, 0, '\t', 0)
-	fmt.Println(w, header)
+	fmt.Fprintf(w, "ingredient\tamount\tprice\n")
 
-	for i, j := range l1 {
-		fmt.Println(w, i, d, j, d, l2[i])
+	for name, menge := range l1 {
+		fmt.Fprintf(w, name, "\t", menge, "\t", l2[name], "\n")
 	}
 	w.Flush()
 }

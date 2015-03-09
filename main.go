@@ -21,12 +21,12 @@ type config struct {
 }
 
 type cocktail struct {
-	name    string
-	zutaten map[string]float64
+	name        string
+	ingredients map[string]float64
 }
 
 type fest struct {
-	datum     string
+	date      string
 	cocktails map[string]float64
 }
 
@@ -89,27 +89,27 @@ func (in *input) getInt(prompt string, values ...interface{}) (int, error) {
 	return i, err
 }
 
-func (in *input) getZutaten() (zutaten map[string]float64) {
-	anzahl, err := in.getInt("Anzahl der Zutaten: ")
+func (in *input) getIngredients() (ingredients map[string]float64) {
+	anzahl, err := in.getInt("number of ingredients: ")
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	zutaten = make(map[string]float64)
+	ingredients = make(map[string]float64)
 
 	for i := 0; i < anzahl; i++ {
-		name, err := in.getString("Name der Zutat " + strconv.Itoa(i) + ": ")
+		name, err := in.getString("name of ingredient %d", i)
 		if err != nil {
 			log.Fatal(err)
 		}
-		menge, err := in.getFloat("Menge: ")
+		menge, err := in.getFloat("amount: ")
 		if err != nil {
 			log.Fatal(err)
 		}
 
-		zutaten[name] = menge
+		ingredients[name] = menge
 	}
-	return zutaten
+	return ingredients
 }
 
 func (in *input) createCocktail(db *DB) {
@@ -119,7 +119,7 @@ func (in *input) createCocktail(db *DB) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	c.zutaten = in.getZutaten()
+	c.ingredients = in.getIngredients()
 
 	_, err = db.Exec("INSERT INTO cocktails (name) values ($1);", c.name)
 	if err != nil {
@@ -151,7 +151,7 @@ func (in *input) createCocktail(db *DB) {
 		log.Fatal("Preparing insertion into inventar failed:", err)
 	}
 
-	for zutat, menge := range c.zutaten {
+	for zutat, menge := range c.ingredients {
 		_, err := stmt.Exec(zutat, menge, id)
 		if err != nil {
 			log.Fatal("Inserting into Cocktailzutaten failed:", err)
@@ -192,7 +192,7 @@ func (db *DB) initDB() {
 	}
 }
 
-func (db *DB) cocktailZutaten(cocktail string) (zutaten map[string]float64) {
+func (db *DB) cocktailIngredients(cocktail string) (ingredients map[string]float64) {
 
 	rows, err := db.Query("SELECT id FROM cocktails WHERE name = $1", cocktail)
 	if err != nil {
@@ -212,18 +212,18 @@ func (db *DB) cocktailZutaten(cocktail string) (zutaten map[string]float64) {
 		log.Fatal("selecting from zutaten failed:", err)
 	}
 
-	zutaten = make(map[string]float64)
+	ingredients = make(map[string]float64)
 	for rows.Next() {
 		var name string
 		var menge float64
 		if err := rows.Scan(&name, &menge); err != nil {
 			log.Fatal("Scanning rows failed:", err)
 		}
-		zutaten[name] = menge
+		ingredients[name] = menge
 	}
 	rows.Close()
 
-	return zutaten
+	return ingredients
 }
 
 func (db *DB) getCocktails() []cocktail {
@@ -241,7 +241,7 @@ func (db *DB) getCocktails() []cocktail {
 			log.Fatal("Scanning Rows failed:", err)
 		}
 
-		c.zutaten = db.cocktailZutaten(c.name)
+		c.ingredients = db.cocktailIngredients(c.name)
 		cocktails = append(cocktails, c)
 	}
 
@@ -250,15 +250,15 @@ func (db *DB) getCocktails() []cocktail {
 }
 
 func (in *input) addInventory(db *DB) {
-	name, err := in.getString("Name: ")
+	name, err := in.getString("name: ")
 	if err != nil {
 		log.Fatal(err)
 	}
-	avail, err := in.getFloat("Vorhanden [l]: ")
+	avail, err := in.getFloat("available [l]: ")
 	if err != nil {
 		log.Fatal(err)
 	}
-	price, err := in.getInt("Preis [ct]: ")
+	price, err := in.getInt("price [ct]: ")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -318,7 +318,7 @@ func (in *input) updateAvailability(db *DB) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	avail, err := in.getFloat("Vorhanden [l]: ")
+	avail, err := in.getFloat("available [l]: ")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -346,9 +346,9 @@ func (in *input) updatePrice(db *DB) {
 
 func (db *DB) getFest(cfg config) fest {
 	f := newFest()
-	f.datum = cfg.Current
+	f.date = cfg.Current
 
-	rows, err := db.Query("SELECT cocktails, menge FROM feste WHERE datum = $1", f.datum)
+	rows, err := db.Query("SELECT cocktails, menge FROM feste WHERE datum = $1", f.date)
 	if err != nil {
 		log.Fatal("selecting cocktails failed:", err)
 	}
@@ -367,51 +367,51 @@ func (db *DB) getFest(cfg config) fest {
 	return f
 }
 
-func (db *DB) genShoppingList(cfg config) (einkaufsliste map[string]float64, preisliste map[string]float64) {
+func (db *DB) genShoppingList(cfg config) (shoppinglist map[string]float64, pricelist map[string]float64) {
 	cocktails := db.getCocktails()
 	inventar := db.getInventory()
 	f := db.getFest(cfg)
 
-	einkaufsliste = make(map[string]float64)
+	shoppinglist = make(map[string]float64)
 
 	for _, c := range cocktails {
-		for z, m := range c.zutaten {
-			einkaufsliste[z] += f.cocktails[c.name] * m
+		for z, m := range c.ingredients {
+			shoppinglist[z] += f.cocktails[c.name] * m
 		}
 	}
 
 	for z, m := range inventar {
-		einkaufsliste[z] -= m
-		if einkaufsliste[z] <= 0 {
-			einkaufsliste[z] = 0
+		shoppinglist[z] -= m
+		if shoppinglist[z] <= 0 {
+			shoppinglist[z] = 0
 		}
 	}
 
 	prices := db.getInventoryPriceList()
-	preisliste = make(map[string]float64)
+	pricelist = make(map[string]float64)
 
-	for z, m := range einkaufsliste {
-		preisliste[z] = m * prices[z]
+	for z, m := range shoppinglist {
+		pricelist[z] = m * prices[z]
 	}
 
-	return einkaufsliste, preisliste
+	return shoppinglist, pricelist
 }
 
 func (in *input) updateInventory(db *DB) {
-	items := []string{"Item hinzufügen [i]", "Menge ändern [m]", "Preis ändern [p]"}
+	items := []string{"add item [a]", "change availability [a]", "change price [p]"}
 	for i := range items {
 		fmt.Println(i)
 	}
 
-	c, err := in.getString("Auswahl: ")
+	c, err := in.getString("Choice: ")
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	switch {
-	case c == "i":
+	case c == "a":
 		in.addInventory(db)
-	case c == "m":
+	case c == "a":
 		in.updateAvailability(db)
 	case c == "p":
 		in.updatePrice(db)
@@ -419,13 +419,13 @@ func (in *input) updateInventory(db *DB) {
 }
 
 func (in *input) setFest(db *DB, cfg config) {
-	fmt.Println("Wähle Cocktails aus. Zur Verfügung stehen: ")
+	fmt.Println("Choose cocktails. Available: ")
 
 	cocktails := db.getCocktails()
 	for i, c := range cocktails {
 		fmt.Println(i, c.name)
 	}
-	choice, err := in.getString("Bitte Auswahl mit ',' trennen.")
+	choice, err := in.getString("Separate choice with ','.")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -441,11 +441,11 @@ func (in *input) setFest(db *DB, cfg config) {
 			log.Fatal(err)
 		}
 
-		menge, err := in.getInt("Wie viele %s sollen angeboten werden?", cocktails[id].name)
+		menge, err := in.getInt("How many %s are you planning for?", cocktails[id].name)
 		if err != nil {
 			log.Fatal(err)
 		}
-		preis, err := in.getFloat("Wie viel soll ein " + cocktails[id].name + " kosten [ct]? ")
+		preis, err := in.getFloat("What's the price for a %s?", cocktails[id].name)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -455,12 +455,12 @@ func (in *input) setFest(db *DB, cfg config) {
 }
 
 func (in *input) mainMenu(db *DB, cfg config) error {
-	items := []string{"Cocktail erstellen [c]", "Inventar updaten [i]", "Festcocktails festlegen [f]", "Einkaufsliste erstellen [e]", "Beenden [q]"}
+	items := []string{"create cocktail [c]", "update inventory [u]", "set fest cocktails [s]", "generate shopping list [g]", "quit [q]"}
 	for _, i := range items {
 		fmt.Println(i)
 	}
 
-	c, err := in.getString("Aktion: ")
+	c, err := in.getString("Choice: ")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -468,19 +468,22 @@ func (in *input) mainMenu(db *DB, cfg config) error {
 	switch {
 	case c == "c":
 		in.createCocktail(db)
-	case c == "i":
+	case c == "u":
 		in.updateInventory(db)
-	case c == "f":
+	case c == "s":
 		in.setFest(db, cfg)
-	case c == "e":
-		liste, preisliste := db.genShoppingList(cfg)
-		fmt.Println(liste)
-		fmt.Println(preisliste)
+	case c == "g":
+		shoppinglist, pricelist := db.genShoppingList(cfg)
+		in.printLists(shoppinglist, pricelist)
 	case c == "q":
 		return nil
+	default:
+		return fmt.Errorf("No valid choice, try again…")
 	}
+}
 
-	return fmt.Errorf("Keinr valide Auswahl. Erneut versuchen")
+//TODO: implement this!
+func printLists(l1 map[string]float64, l2 map[string]float64) {
 }
 
 func (db *DB) createOrOpenDB(database string) {
@@ -526,6 +529,6 @@ func main() {
 
 	//	createCocktail(db)
 	//	addInventory(db)
-	//	liste, preisliste := genShoppingList(db)
-	//  fmt.Println(liste, preisliste)
+	//	liste, pricelist := genShoppingList(db)
+	//  fmt.Println(liste, pricelist)
 }

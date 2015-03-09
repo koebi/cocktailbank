@@ -35,7 +35,7 @@ func newFest() fest {
 	}
 }
 
-type db struct {
+type DB struct {
 	*sql.DB
 }
 
@@ -111,7 +111,7 @@ func (in *input) getZutaten() (zutaten map[string]float64) {
 	return zutaten
 }
 
-func (in *input) createCocktail(db *db) {
+func (in *input) createCocktail(db *DB) {
 	var c cocktail
 	var err error
 	c.name, err = in.getString("Name: ")
@@ -163,9 +163,9 @@ func (in *input) createCocktail(db *db) {
 	}
 }
 
-func (db *db) initDB() {
+func (db *DB) initDB() {
 	tmp, err := sql.Open("sqlite3", "fest.db")
-	*db = db{tmp}
+	db = &DB{tmp}
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -191,7 +191,7 @@ func (db *db) initDB() {
 	}
 }
 
-func (db *db) cocktailZutaten(cocktail string) (zutaten map[string]float64) {
+func (db *DB) cocktailZutaten(cocktail string) (zutaten map[string]float64) {
 
 	rows, err := db.Query("SELECT id FROM cocktails WHERE name = $1", cocktail)
 	if err != nil {
@@ -225,7 +225,7 @@ func (db *db) cocktailZutaten(cocktail string) (zutaten map[string]float64) {
 	return zutaten
 }
 
-func (db *db) getCocktails() []cocktail {
+func (db *DB) getCocktails() []cocktail {
 	rows, err := db.Query("SELECT name FROM cocktails")
 	if err != nil {
 		log.Fatal("Selecting cocktail name failed:", err)
@@ -248,7 +248,7 @@ func (db *db) getCocktails() []cocktail {
 	return cocktails
 }
 
-func (in *input) addInventory(db *db) {
+func (in *input) addInventory(db *DB) {
 	name, err := in.getString("Name: ")
 	if err != nil {
 		log.Fatal(err)
@@ -268,7 +268,7 @@ func (in *input) addInventory(db *db) {
 	}
 }
 
-func (db *db) getInventory() (inventory map[string]float64) {
+func (db *DB) getInventory() (inventory map[string]float64) {
 	inventory = make(map[string]float64)
 
 	rows, err := db.Query("SELECT name, vorhanden FROM inventar")
@@ -290,7 +290,7 @@ func (db *db) getInventory() (inventory map[string]float64) {
 	return inventory
 }
 
-func (db *db) getInventoryPriceList() (prices map[string]float64) {
+func (db *DB) getInventoryPriceList() (prices map[string]float64) {
 	prices = make(map[string]float64)
 
 	rows, err := db.Query("SELECT name, preis FROM inventar")
@@ -312,7 +312,7 @@ func (db *db) getInventoryPriceList() (prices map[string]float64) {
 	return prices
 }
 
-func (in *input) updateAvailability(db *db) {
+func (in *input) updateAvailability(db *DB) {
 	name, err := in.getString("Name: ")
 	if err != nil {
 		log.Fatal(err)
@@ -327,7 +327,7 @@ func (in *input) updateAvailability(db *db) {
 	}
 }
 
-func (in *input) updatePrice(db *db) {
+func (in *input) updatePrice(db *DB) {
 	name, err := in.getString("Name: ")
 	if err != nil {
 		log.Fatal(err)
@@ -343,7 +343,7 @@ func (in *input) updatePrice(db *db) {
 	}
 }
 
-func (db *db) getFest(cfg config) fest {
+func (db *DB) getFest(cfg config) fest {
 	f := newFest()
 	f.datum = cfg.Current
 
@@ -366,7 +366,7 @@ func (db *db) getFest(cfg config) fest {
 	return f
 }
 
-func (db *db) genShoppingList(cfg config) (einkaufsliste map[string]float64, preisliste map[string]float64) {
+func (db *DB) genShoppingList(cfg config) (einkaufsliste map[string]float64, preisliste map[string]float64) {
 	cocktails := db.getCocktails()
 	inventar := db.getInventory()
 	f := db.getFest(cfg)
@@ -396,7 +396,7 @@ func (db *db) genShoppingList(cfg config) (einkaufsliste map[string]float64, pre
 	return einkaufsliste, preisliste
 }
 
-func (in *input) updateInventory(db *db) {
+func (in *input) updateInventory(db *DB) {
 	items := []string{"Item hinzufügen [i]", "Menge ändern [m]", "Preis ändern [p]"}
 	for i := range items {
 		fmt.Println(i)
@@ -417,7 +417,7 @@ func (in *input) updateInventory(db *db) {
 	}
 }
 
-func (in *input) setFest(db *db, cfg config) {
+func (in *input) setFest(db *DB, cfg config) {
 	fmt.Println("Wähle Cocktails aus. Zur Verfügung stehen: ")
 
 	cocktails := db.getCocktails()
@@ -453,7 +453,7 @@ func (in *input) setFest(db *db, cfg config) {
 	}
 }
 
-func (in *input) mainMenu(db *db, cfg config) error {
+func (in *input) mainMenu(db *DB, cfg config) error {
 	items := []string{"Cocktail erstellen [c]", "Inventar updaten [i]", "Festcocktails festlegen [f]", "Einkaufsliste erstellen [e]", "Beenden [q]"}
 	for _, i := range items {
 		fmt.Println(i)
@@ -483,7 +483,7 @@ func (in *input) mainMenu(db *db, cfg config) error {
 }
 
 func main() {
-	var db *db
+	var db *DB
 	configLocation := "/home/koebi/go/src/github.com/koebi/cocktailbank/config.toml"
 
 	_, err := os.Stat("fest.db")
@@ -493,7 +493,7 @@ func main() {
 		log.Fatal("Stat returned:", err)
 	} else {
 		tmp, err := sql.Open("sqlite3", "fest.db")
-		*db = db{tmp}
+		db = &DB{tmp}
 		if err != nil {
 			log.Fatal("Opening Database Failed:", err)
 		}

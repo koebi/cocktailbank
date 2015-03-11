@@ -518,9 +518,11 @@ func main() {
 
 	//parsing config
 	configLocation := "/home/koebi/go/src/github.com/koebi/cocktailbank/config.toml"
+
 	var cfg config
 	if _, err := toml.Decode(configLocation, &cfg); err != nil {
 		fmt.Println("Config-File at location", configLocation, "not found, exiting")
+		fmt.Println(err)
 		return
 	}
 

@@ -507,10 +507,10 @@ func (db *DB) createOrOpenDB(database string) {
 		log.Fatal("Stat returned:", err)
 	} else {
 		tmp, err := sql.Open("sqlite3", database)
-		db = &DB{tmp}
 		if err != nil {
 			log.Fatal("Opening Database Failed:", err)
 		}
+		db = &DB{tmp}
 	}
 }
 
@@ -520,7 +520,7 @@ func main() {
 	configLocation := "/home/koebi/go/src/github.com/koebi/cocktailbank/config.toml"
 
 	var cfg config
-	if _, err := toml.Decode(configLocation, &cfg); err != nil {
+	if _, err := toml.DecodeFile(configLocation, &cfg); err != nil {
 		fmt.Println("Config-File at location", configLocation, "not found, exiting")
 		fmt.Println(err)
 		return

@@ -4,13 +4,14 @@ import (
 	"bufio"
 	"database/sql"
 	"fmt"
-	"github.com/BurntSushi/toml"
 	"io"
 	"log"
 	"os"
 	"strconv"
 	"strings"
 	"text/tabwriter"
+
+	"github.com/BurntSushi/toml"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -167,32 +168,28 @@ func (in *input) createCocktail(db *DB) {
 	}
 }
 
-func (db *DB) initDB() {
-	tmp, err := sql.Open("sqlite3", "fest.db")
-	db = &DB{tmp}
+func (db *DB) initDB() error {
+	_, err := db.Exec("CREATE TABLE cocktails (id INTEGER NOT NULL PRIMARY KEY ASC AUTOINCREMENT, name TEXT);")
 	if err != nil {
-		log.Fatal(err)
-	}
-
-	_, err = db.Exec("CREATE TABLE cocktails (id INTEGER NOT NULL PRIMARY KEY ASC AUTOINCREMENT, name TEXT);")
-	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	_, err = db.Exec("CREATE TABLE ingredients (name TEXT, amount FLOAT, cocktail INT);")
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	_, err = db.Exec("CREATE TABLE inventory (name TEXT UNIQUE ON CONFLICT IGNORE, available FLOAT DEFAULT 0.0, price INTEGER DEFAULT 0);")
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	_, err = db.Exec("CREATE TABLE fests (date TEXT, cocktails INTEGER, price INTEGER DEFAULT 0, amount INTEGER DEFAULT 0);")
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
+
+	return nil
 }
 
 func (db *DB) cocktailIngredients(cocktail string) (ingredients map[string]float64) {
@@ -499,18 +496,24 @@ func printLists(l1 map[string]float64, l2 map[string]float64) {
 	w.Flush()
 }
 
-func (db *DB) createOrOpenDB(database string) {
+func createOrOpenDB(database string) (*DB, error) {
 	_, err := os.Stat(database)
 	if os.IsNotExist(err) {
-		db.initDB()
+		fmt.Printf("Database not found, creating new…")
+		var db *DB
+		err = db.initDB()
+		if err != nil {
+			return nil, err
+		}
+		return db, nil
 	} else if err != nil {
-		log.Fatal("Stat returned:", err)
+		return nil, err
 	} else {
 		tmp, err := sql.Open("sqlite3", database)
 		if err != nil {
-			log.Fatal("Opening Database Failed:", err)
+			return nil, err
 		}
-		db = &DB{tmp}
+		return &DB{tmp}, err
 	}
 }
 
@@ -530,8 +533,10 @@ func main() {
 	in := newInput(os.Stdin, os.Stdout)
 
 	//creating/opening database
-	var db *DB
-	db.createOrOpenDB(cfg.Database)
+	db, err := createOrOpenDB(cfg.Database)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	//main loop running the menu until quit.
 	for {

@@ -25,3 +25,6 @@ _testmain.go
 
 # swp files created by vim
 *.swp
+
+# database file
+*.sqlite

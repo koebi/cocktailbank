@@ -500,9 +500,11 @@ func createOrOpenDB(database string) (*DB, error) {
 	_, err := os.Stat(database)
 	if os.IsNotExist(err) {
 		fmt.Printf("Database not found, creating new…")
-		var db *DB
+
+		tmp := sql.Open("sqlite3", database)
+		db := &DB{tmp}
 		err = db.initDB()
-		if err != nil {
+		if err = db.initDB(); err != nil {
 			return nil, err
 		}
 		return db, nil

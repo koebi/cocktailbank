@@ -169,23 +169,38 @@ func (in *input) createCocktail(db *DB) {
 }
 
 func (db *DB) initDB() error {
-	_, err := db.Exec("CREATE TABLE cocktails (id INTEGER NOT NULL PRIMARY KEY ASC AUTOINCREMENT, name TEXT);")
+	tx, err := db.Begin()
 	if err != nil {
 		return err
 	}
 
-	_, err = db.Exec("CREATE TABLE ingredients (name TEXT, amount FLOAT, cocktail INT);")
+	_, err = tx.Exec("CREATE TABLE cocktails (id INTEGER NOT NULL PRIMARY KEY ASC AUTOINCREMENT, name TEXT);")
 	if err != nil {
+		err := tx.Rollback()
 		return err
 	}
 
-	_, err = db.Exec("CREATE TABLE inventory (name TEXT UNIQUE ON CONFLICT IGNORE, available FLOAT DEFAULT 0.0, price INTEGER DEFAULT 0);")
+	_, err = tx.Exec("CREATE TABLE ingredients (name TEXT, amount FLOAT, cocktail INT);")
 	if err != nil {
+		err := tx.Rollback()
 		return err
 	}
 
-	_, err = db.Exec("CREATE TABLE fests (date TEXT, cocktails INTEGER, price INTEGER DEFAULT 0, amount INTEGER DEFAULT 0);")
+	_, err = tx.Exec("CREATE TABLE inventory (name TEXT UNIQUE ON CONFLICT IGNORE, available FLOAT DEFAULT 0.0, price INTEGER DEFAULT 0);")
 	if err != nil {
+		err := tx.Rollback()
+		return err
+	}
+
+	_, err = tx.Exec("CREATE TABLE fests (date TEXT, cocktails INTEGER, price INTEGER DEFAULT 0, amount INTEGER DEFAULT 0);")
+	if err != nil {
+		err := tx.Rollback()
+		return err
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		err = tx.Rollback()
 		return err
 	}
 
@@ -499,11 +514,13 @@ func printLists(l1 map[string]float64, l2 map[string]float64) {
 func createOrOpenDB(database string) (*DB, error) {
 	_, err := os.Stat(database)
 	if os.IsNotExist(err) {
-		fmt.Printf("Database not found, creating new…")
+		fmt.Printf("Database not found, creating new…\n")
 
-		tmp := sql.Open("sqlite3", database)
+		tmp, err := sql.Open("sqlite3", database)
+		if err != nil {
+			return nil, err
+		}
 		db := &DB{tmp}
-		err = db.initDB()
 		if err = db.initDB(); err != nil {
 			return nil, err
 		}

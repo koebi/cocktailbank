@@ -125,45 +125,58 @@ func (in *input) createCocktail(db *DB) error {
 	}
 	c.ingredients = in.getIngredients()
 
-	_, err = db.Exec("INSERT INTO cocktails (name) values ($1);", c.name)
+	err = db.insertCocktail(c)
 	if err != nil {
-		fmt.Println("Inserting into cocktails failed, getting:")
-		log.Fatal(err)
+		return err
+	}
+	return nil
+}
+
+func (db *DB) insertCocktail(c cocktail) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	_, err = tx.Exec("INSERT INTO cocktails (name) values ($1);", c.name)
+	if err != nil {
+		return err
 	}
 
-	rows, err := db.Query("SELECT id FROM cocktails WHERE name = $1;", c.name)
+	rows, err := tx.Query("SELECT id FROM cocktails WHERE name = $1;", c.name)
 	if err != nil {
-		log.Fatal("Selecting id failed, getting", err)
+		return err
 	}
 
 	var id int
 	for rows.Next() {
 		err = rows.Scan(&id)
 		if err != nil {
-			log.Fatal("Scanning rows failed, getting", err)
+			return err
 		}
 	}
 	rows.Close()
 
-	stmt, err := db.Prepare("INSERT INTO ingredients (name, amount, cocktail) values($1, $2, $3)")
+	stmt, err := tx.Prepare("INSERT INTO ingredients (name, amount, cocktail) values($1, $2, $3)")
 	if err != nil {
-		log.Fatal("Preparing insertion into ingredients failed:", err)
+		return err
 	}
 
-	st, err := db.Prepare("INSERT INTO inventory (name) values($1)")
+	st, err := tx.Prepare("INSERT INTO inventory (name) values($1)")
 	if err != nil {
-		log.Fatal("Preparing insertion into inventory failed:", err)
+		return err
 	}
 
 	for zutat, amount := range c.ingredients {
 		_, err := stmt.Exec(zutat, amount, id)
 		if err != nil {
-			log.Fatal("Inserting into Cocktailingredients failed:", err)
+			return err
 		}
 
 		_, err = st.Exec(zutat)
 		if err != nil {
-			log.Fatal("Inserting into Inventar failed:", err)
+			return err
 		}
 	}
 	return nil
@@ -451,7 +464,7 @@ func (in *input) setFest(db *DB, cfg config) error {
 	for i, c := range cocktails {
 		fmt.Println(i, c.name)
 	}
-	choice, err := in.getString("Separate choice with ','.")
+	choice, err := in.getString("Separate choice with ',': ")
 	if err != nil {
 		return err
 	}
@@ -467,11 +480,11 @@ func (in *input) setFest(db *DB, cfg config) error {
 			return err
 		}
 
-		amount, err := in.getInt("How many %s are you planning for?", cocktails[id].name)
+		amount, err := in.getInt("How many %s are you planning for? ", cocktails[id].name)
 		if err != nil {
 			return err
 		}
-		price, err := in.getFloat("What's the price for a %s?", cocktails[id].name)
+		price, err := in.getFloat("What's the price for a %s? ", cocktails[id].name)
 		if err != nil {
 			return err
 		}
@@ -522,7 +535,7 @@ func printLists(l1 map[string]float64, l2 map[string]float64) error {
 	fmt.Fprintf(w, "ingredient\tamount\tprice\n")
 
 	for name, menge := range l1 {
-		fmt.Fprintf(w, name, "\t", menge, "\t", l2[name], "\n")
+		fmt.Fprintf(w, "%s\t%.2f\t%.2f\n", name, menge, l2[name])
 	}
 	w.Flush()
 	return nil

@@ -102,11 +102,11 @@ func (in *input) getIngredients() (ingredients map[string]float64) {
 	ingredients = make(map[string]float64)
 
 	for i := 0; i < anzahl; i++ {
-		name, err := in.getString("name of ingredient %d", i)
+		name, err := in.getString("name of ingredient %d: ", i)
 		if err != nil {
 			log.Fatal(err)
 		}
-		amount, err := in.getFloat("amount: ")
+		amount, err := in.getFloat("amount [l]: ")
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -116,7 +116,7 @@ func (in *input) getIngredients() (ingredients map[string]float64) {
 	return ingredients
 }
 
-func (in *input) createCocktail(db *DB) {
+func (in *input) createCocktail(db *DB) error {
 	var c cocktail
 	var err error
 	c.name, err = in.getString("Name: ")
@@ -166,6 +166,7 @@ func (in *input) createCocktail(db *DB) {
 			log.Fatal("Inserting into Inventar failed:", err)
 		}
 	}
+	return nil
 }
 
 func (db *DB) initDB() error {
@@ -173,58 +174,58 @@ func (db *DB) initDB() error {
 	if err != nil {
 		return err
 	}
+	defer tx.Rollback()
 
 	_, err = tx.Exec("CREATE TABLE cocktails (id INTEGER NOT NULL PRIMARY KEY ASC AUTOINCREMENT, name TEXT);")
 	if err != nil {
-		err := tx.Rollback()
+		tx.Rollback()
 		return err
 	}
 
 	_, err = tx.Exec("CREATE TABLE ingredients (name TEXT, amount FLOAT, cocktail INT);")
 	if err != nil {
-		err := tx.Rollback()
+		tx.Rollback()
 		return err
 	}
 
 	_, err = tx.Exec("CREATE TABLE inventory (name TEXT UNIQUE ON CONFLICT IGNORE, available FLOAT DEFAULT 0.0, price INTEGER DEFAULT 0);")
 	if err != nil {
-		err := tx.Rollback()
+		tx.Rollback()
 		return err
 	}
 
 	_, err = tx.Exec("CREATE TABLE fests (date TEXT, cocktails INTEGER, price INTEGER DEFAULT 0, amount INTEGER DEFAULT 0);")
 	if err != nil {
-		err := tx.Rollback()
+		tx.Rollback()
 		return err
 	}
 
 	err = tx.Commit()
 	if err != nil {
-		err = tx.Rollback()
 		return err
 	}
 
 	return nil
 }
 
-func (db *DB) cocktailIngredients(cocktail string) (ingredients map[string]float64) {
+func (db *DB) cocktailIngredients(cocktail string) (ingredients map[string]float64, err error) {
 
 	rows, err := db.Query("SELECT id FROM cocktails WHERE name = $1", cocktail)
 	if err != nil {
-		log.Fatal("selecting cocktail id failed:", err)
+		return nil, err
 	}
 
 	var id int
 	for rows.Next() {
 		if err := rows.Scan(&id); err != nil {
-			log.Fatal("scanning rows failed:", err)
+			return nil, err
 		}
 	}
 	rows.Close()
 
 	rows, err = db.Query("SELECT name, amount FROM ingredients WHERE cocktail = $1", id)
 	if err != nil {
-		log.Fatal("selecting from ingredients failed:", err)
+		return nil, err
 	}
 
 	ingredients = make(map[string]float64)
@@ -232,19 +233,19 @@ func (db *DB) cocktailIngredients(cocktail string) (ingredients map[string]float
 		var name string
 		var amount float64
 		if err := rows.Scan(&name, &amount); err != nil {
-			log.Fatal("Scanning rows failed:", err)
+			return nil, err
 		}
 		ingredients[name] = amount
 	}
 	rows.Close()
 
-	return ingredients
+	return ingredients, nil
 }
 
-func (db *DB) getCocktails() []cocktail {
+func (db *DB) getCocktails() ([]cocktail, error) {
 	rows, err := db.Query("SELECT name FROM cocktails")
 	if err != nil {
-		log.Fatal("Selecting cocktail name failed:", err)
+		return nil, err
 	}
 
 	var cocktails []cocktail
@@ -253,15 +254,18 @@ func (db *DB) getCocktails() []cocktail {
 		var c cocktail
 
 		if err := rows.Scan(&c.name); err != nil {
-			log.Fatal("Scanning Rows failed:", err)
+			return nil, err
 		}
 
-		c.ingredients = db.cocktailIngredients(c.name)
+		c.ingredients, err = db.cocktailIngredients(c.name)
+		if err != nil {
+			return nil, err
+		}
 		cocktails = append(cocktails, c)
 	}
 
 	rows.Close()
-	return cocktails
+	return cocktails, nil
 }
 
 func (in *input) addInventory(db *DB) {
@@ -382,8 +386,11 @@ func (db *DB) getFest(cfg config) fest {
 	return f
 }
 
-func (db *DB) genShoppingList(cfg config) (shoppinglist map[string]float64, pricelist map[string]float64) {
-	cocktails := db.getCocktails()
+func (db *DB) genShoppingList(cfg config) (shoppinglist map[string]float64, pricelist map[string]float64, err error) {
+	cocktails, err := db.getCocktails()
+	if err != nil {
+		return nil, nil, err
+	}
 	inventory := db.getInventory()
 	f := db.getFest(cfg)
 
@@ -409,7 +416,7 @@ func (db *DB) genShoppingList(cfg config) (shoppinglist map[string]float64, pric
 		pricelist[z] = m * prices[z]
 	}
 
-	return shoppinglist, pricelist
+	return shoppinglist, pricelist, nil
 }
 
 func (in *input) updateInventory(db *DB) {
@@ -433,40 +440,45 @@ func (in *input) updateInventory(db *DB) {
 	}
 }
 
-func (in *input) setFest(db *DB, cfg config) {
+func (in *input) setFest(db *DB, cfg config) error {
 	fmt.Println("Choose cocktails. Available: ")
 
-	cocktails := db.getCocktails()
+	cocktails, err := db.getCocktails()
+	if err != nil {
+		return err
+	}
+
 	for i, c := range cocktails {
 		fmt.Println(i, c.name)
 	}
 	choice, err := in.getString("Separate choice with ','.")
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	stmt, err := db.Prepare("INSERT INTO fests (date, cocktails, price, amount) values ($1, $2, $3, $4)")
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	for _, c := range strings.Split(choice, ",") {
 		id, err := strconv.Atoi(c)
 		if err != nil {
-			log.Fatal(err)
+			return err
 		}
 
 		amount, err := in.getInt("How many %s are you planning for?", cocktails[id].name)
 		if err != nil {
-			log.Fatal(err)
+			return err
 		}
 		price, err := in.getFloat("What's the price for a %s?", cocktails[id].name)
 		if err != nil {
-			log.Fatal(err)
+			return err
 		}
 
 		stmt.Exec(cfg.Current, cocktails[id].name, price, amount)
 	}
+	return nil
 }
 
 func (in *input) mainMenu(db *DB, cfg config) error {
@@ -488,8 +500,12 @@ func (in *input) mainMenu(db *DB, cfg config) error {
 	case c == "s":
 		in.setFest(db, cfg)
 	case c == "g":
-		shoppinglist, pricelist := db.genShoppingList(cfg)
-		printLists(shoppinglist, pricelist)
+		shoppinglist, pricelist, err := db.genShoppingList(cfg)
+		if err != nil {
+			return err
+		}
+		err = printLists(shoppinglist, pricelist)
+		return err
 	case c == "q":
 		return nil
 	default:
@@ -499,7 +515,7 @@ func (in *input) mainMenu(db *DB, cfg config) error {
 	return fmt.Errorf("control reached end of function mainMenu")
 }
 
-func printLists(l1 map[string]float64, l2 map[string]float64) {
+func printLists(l1 map[string]float64, l2 map[string]float64) error {
 	w := new(tabwriter.Writer)
 
 	w.Init(os.Stdout, 0, 8, 0, '\t', 0)
@@ -509,6 +525,7 @@ func printLists(l1 map[string]float64, l2 map[string]float64) {
 		fmt.Fprintf(w, name, "\t", menge, "\t", l2[name], "\n")
 	}
 	w.Flush()
+	return nil
 }
 
 func createOrOpenDB(database string) (*DB, error) {

@@ -600,7 +600,7 @@ func createOrOpenDB(database string) (*DB, error) {
 func main() {
 
 	//parsing config
-	configLocation := "/home/koebi/go/src/github.com/koebi/cocktailbank/config.toml"
+	configLocation := "config.toml"
 
 	var cfg config
 	if _, err := toml.DecodeFile(configLocation, &cfg); err != nil {

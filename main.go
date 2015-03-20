@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"reflect"
 	"strconv"
 	"strings"
 	"text/tabwriter"
@@ -93,27 +94,30 @@ func (in *input) getInt(prompt string, values ...interface{}) (int, error) {
 	return i, err
 }
 
-func (in *input) getIngredients() (ingredients map[string]float64) {
+//TODO: rewrite so that Ingredients only show currently available ingredients
+//      so that zitronensaft doesn't get imported twice as Zitronensaft…
+//      might have to implement adding an ingredient to the inventory…
+func (in *input) getIngredients() (ingredients map[string]float64, err error) {
 	anzahl, err := in.getInt("number of ingredients: ")
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 
 	ingredients = make(map[string]float64)
 
 	for i := 0; i < anzahl; i++ {
-		name, err := in.getString("name of ingredient %d: ", i)
+		name, err := in.getString("name of ingredient %d: ", i+1)
 		if err != nil {
-			log.Fatal(err)
+			return nil, err
 		}
 		amount, err := in.getFloat("amount [l]: ")
 		if err != nil {
-			log.Fatal(err)
+			return nil, err
 		}
 
 		ingredients[name] = amount
 	}
-	return ingredients
+	return ingredients, nil
 }
 
 func (in *input) createCocktail(db *DB) error {
@@ -121,9 +125,12 @@ func (in *input) createCocktail(db *DB) error {
 	var err error
 	c.name, err = in.getString("Name: ")
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
-	c.ingredients = in.getIngredients()
+	c.ingredients, err = in.getIngredients()
+	if err != nil {
+		return err
+	}
 
 	err = db.insertCocktail(c)
 	if err != nil {
@@ -178,6 +185,11 @@ func (db *DB) insertCocktail(c cocktail) error {
 		if err != nil {
 			return err
 		}
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return err
 	}
 	return nil
 }
@@ -346,15 +358,33 @@ func (db *DB) getInventoryPriceList() (prices map[string]float64) {
 }
 
 func (in *input) updateAvailability(db *DB) {
-	name, err := in.getString("Name: ")
+	inventory := db.getInventory()
+	var numberedInv []string
+
+	for item := range inventory {
+		numberedInv = append(numberedInv, item)
+	}
+
+	for i, item := range numberedInv {
+		fmt.Printf("%d: %s\t%.2f\n", i, item, inventory[item])
+	}
+
+	update, err := in.getInt("Which item do you want to update? ")
 	if err != nil {
 		log.Fatal(err)
 	}
-	avail, err := in.getFloat("available [l]: ")
+
+	avail, err := in.getFloat("How much is available? [l]: ")
 	if err != nil {
 		log.Fatal(err)
 	}
-	_, err = db.Exec("UPDATE inventory SET available = $2 WHERE name = $1", name, avail)
+
+	fmt.Println(reflect.TypeOf(numberedInv[update]), reflect.TypeOf(avail))
+	fmt.Printf("UPDATE inventory SET available = %f WHERE name = %s", avail, numberedInv[update])
+	res, err := db.Exec("UPDATE OR FAIL inventory SET available = $2 WHERE name = $1;", numberedInv[update], avail)
+	id, lasterr := res.LastInsertId()
+	aff, rowserr := res.RowsAffected()
+	fmt.Println(id, lasterr, aff, rowserr, err)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -433,8 +463,8 @@ func (db *DB) genShoppingList(cfg config) (shoppinglist map[string]float64, pric
 }
 
 func (in *input) updateInventory(db *DB) {
-	items := []string{"add item [a]", "change availability [a]", "change price [p]"}
-	for i := range items {
+	items := []string{"add item [i]", "change availability [a]", "change price [p]"}
+	for _, i := range items {
 		fmt.Println(i)
 	}
 
@@ -444,7 +474,7 @@ func (in *input) updateInventory(db *DB) {
 	}
 
 	switch {
-	case c == "a":
+	case c == "i":
 		in.addInventory(db)
 	case c == "a":
 		in.updateAvailability(db)

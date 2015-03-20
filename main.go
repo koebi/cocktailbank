@@ -7,7 +7,6 @@ import (
 	"io"
 	"log"
 	"os"
-	"reflect"
 	"strconv"
 	"strings"
 	"text/tabwriter"
@@ -379,9 +378,9 @@ func (in *input) updateAvailability(db *DB) {
 		log.Fatal(err)
 	}
 
-	fmt.Println(reflect.TypeOf(numberedInv[update]), reflect.TypeOf(avail))
-	fmt.Printf("UPDATE inventory SET available = %f WHERE name = %s", avail, numberedInv[update])
-	res, err := db.Exec("UPDATE OR FAIL inventory SET available = $2 WHERE name = $1;", numberedInv[update], avail)
+	fmt.Printf("%T, %T", numberedInv[update], avail)
+	fmt.Printf("UPDATE inventory SET available = %f WHERE name = %s", avail, "yomama")
+	res, err := db.Exec("UPDATE inventory SET available = $1 WHERE name = $2;", avail, "yomama")
 	id, lasterr := res.LastInsertId()
 	aff, rowserr := res.RowsAffected()
 	fmt.Println(id, lasterr, aff, rowserr, err)

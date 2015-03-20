@@ -499,6 +499,8 @@ func (in *input) setFest(db *DB, cfg config) error {
 		return err
 	}
 
+	//TODO: change to Update, if Cocktail already selected.
+	//      delete if neccessary
 	stmt, err := db.Prepare("INSERT INTO fests (date, cocktails, price, amount) values ($1, $2, $3, $4)")
 	if err != nil {
 		return err

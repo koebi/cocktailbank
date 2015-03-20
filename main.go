@@ -379,8 +379,8 @@ func (in *input) updateAvailability(db *DB) {
 	}
 
 	fmt.Printf("%T, %T", numberedInv[update], avail)
-	fmt.Printf("UPDATE inventory SET available = %f WHERE name = %s", avail, "yomama")
-	res, err := db.Exec("UPDATE inventory SET available = $1 WHERE name = $2;", avail, "yomama")
+	fmt.Printf("UPDATE inventory SET available = %f WHERE name = %s", avail, numberedInv[update])
+	res, err := db.Exec("UPDATE inventory SET available = $1 WHERE name = $2;", avail, numberedInv[update])
 	id, lasterr := res.LastInsertId()
 	aff, rowserr := res.RowsAffected()
 	fmt.Println(id, lasterr, aff, rowserr, err)

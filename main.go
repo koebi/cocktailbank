@@ -29,15 +29,17 @@ type cocktail struct {
 }
 
 type fest struct {
-	date      string
-	cocktails map[string]float64
+	date           string
+	cocktails      map[string]float64
+	cocktailprices map[string]float64
 }
 
 //TODO: implement type shoppinglist
 
 func newFest() fest {
 	return fest{
-		cocktails: make(map[string]float64),
+		cocktails:      make(map[string]float64),
+		cocktailprices: make(map[string]float64),
 	}
 }
 
@@ -381,7 +383,7 @@ func (in *input) updateAvailability(db *DB) {
 
 	fmt.Println(reflect.TypeOf(numberedInv[update]), reflect.TypeOf(avail))
 	fmt.Printf("UPDATE inventory SET available = %f WHERE name = %s", avail, numberedInv[update])
-	res, err := db.Exec("UPDATE OR FAIL inventory SET available = $2 WHERE name = $1;", numberedInv[update], avail)
+	res, err := db.Exec("UPDATE inventory SET available = $1 WHERE name = $2;", avail, numberedInv[update])
 	id, lasterr := res.LastInsertId()
 	aff, rowserr := res.RowsAffected()
 	fmt.Println(id, lasterr, aff, rowserr, err)
@@ -406,27 +408,29 @@ func (in *input) updatePrice(db *DB) {
 	}
 }
 
-func (db *DB) getFest(cfg config) fest {
+func (db *DB) getFest(cfg config) (fest, error) {
 	f := newFest()
 	f.date = cfg.Current
 
-	rows, err := db.Query("SELECT cocktails, amount FROM fests WHERE date = $1", f.date)
+	rows, err := db.Query("SELECT cocktails, amount, price FROM fests WHERE date = $1", f.date)
 	if err != nil {
-		log.Fatal("selecting cocktails failed:", err)
+		return newFest(), err
 	}
 
 	for rows.Next() {
 		var c string
-		var m float64
+		var a float64
+		var p float64
 
-		if err := rows.Scan(&c, &m); err != nil {
-			log.Fatal("scanning rows failed:", err)
+		if err := rows.Scan(&c, &a, &p); err != nil {
+			return newFest(), err
 		}
-		f.cocktails[c] = m
+		f.cocktails[c] = a
+		f.cocktailprices[c] = p
 	}
 	rows.Close()
 
-	return f
+	return f, nil
 }
 
 func (db *DB) genShoppingList(cfg config) (shoppinglist map[string]float64, pricelist map[string]float64, err error) {
@@ -435,7 +439,10 @@ func (db *DB) genShoppingList(cfg config) (shoppinglist map[string]float64, pric
 		return nil, nil, err
 	}
 	inventory := db.getInventory()
-	f := db.getFest(cfg)
+	f, err := db.getFest(cfg)
+	if err != nil {
+		return nil, nil, err
+	}
 
 	shoppinglist = make(map[string]float64)
 
@@ -490,10 +497,15 @@ func (in *input) setFest(db *DB, cfg config) error {
 	if err != nil {
 		return err
 	}
+	fest, err := db.getFest(cfg)
+	if err != nil {
+		return err
+	}
 
 	for i, c := range cocktails {
 		fmt.Println(i, c.name)
 	}
+
 	choice, err := in.getString("Separate choice with ',': ")
 	if err != nil {
 		return err

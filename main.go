@@ -492,7 +492,7 @@ func (db *DB) genShoppingList() (shoppinglist map[string]float64, pricelist map[
 }
 
 func (in *input) setFest(db *DB) error {
-	fmt.Println("Current selection:")
+	fmt.Fprintf(in.w, "Current selection:\n")
 	fest, err := db.getFest()
 	if err != nil {
 		return err

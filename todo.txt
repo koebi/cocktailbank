@@ -1,6 +1,6 @@
-currently, the writer of an input is just a writer.
-could change that to a tabwriter, and then use that everytime I tabwrite stuff
-added comment //tabwriter everywhere this should be
+add flag to parse config location
+
+change error-value for quitting, so you only quit when you quit
 
 add method to query current inventory value
 

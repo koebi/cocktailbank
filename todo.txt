@@ -6,12 +6,9 @@ add method to query current inventory value
 
 move errorhandling to "top" by returning errors everywhere
 
-add menus for handling inventory, fest, cocktails
-	implement methods defined there as menu items
+implement methods in menus marked by "TODO"
 
 restructure code flow:
 	move menu-code into own file
 	move database-code (code dealing only with database) to own file
 	move code for handling inventory, fest, cocktails to own file
-
-

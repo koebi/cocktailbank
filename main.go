@@ -105,32 +105,6 @@ func (in *input) getInt(prompt string, values ...interface{}) (int, error) {
 	return i, err
 }
 
-//TODO: rewrite so that Ingredients only show currently available ingredients
-//      so that zitronensaft doesn't get imported twice as Zitronensaft…
-//      might have to implement adding an ingredient to the inventory…
-func (in *input) getIngredients() (ingredients map[string]float64, err error) {
-	anzahl, err := in.getInt("number of ingredients: ")
-	if err != nil {
-		return nil, err
-	}
-
-	ingredients = make(map[string]float64)
-
-	for i := 0; i < anzahl; i++ {
-		name, err := in.getString("name of ingredient %d: ", i+1)
-		if err != nil {
-			return nil, err
-		}
-		amount, err := in.getFloat("amount [l]: ")
-		if err != nil {
-			return nil, err
-		}
-
-		ingredients[name] = amount
-	}
-	return ingredients, nil
-}
-
 func (in *input) createCocktail(db *DB) error {
 	c := newCocktail()
 	var err error
@@ -515,29 +489,6 @@ func (db *DB) genShoppingList(cfg config) (shoppinglist map[string]float64, pric
 	return shoppinglist, pricelist, nil
 }
 
-func (in *input) updateInventory(db *DB) {
-	items := []string{"add item [i]", "change availability [a]", "change price [p]", "list inventory [l]"}
-	for _, i := range items {
-		fmt.Println(i)
-	}
-
-	c, err := in.getString("Choice: ")
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	switch {
-	case c == "i":
-		in.addInventory(db)
-	case c == "a":
-		in.updateAvailability(db)
-	case c == "p":
-		in.updatePrice(db)
-	case c == "l":
-		in.listInventory(db)
-	}
-}
-
 func (in *input) setFest(db *DB, cfg config) error {
 	fmt.Println("Current selection:")
 	fest, err := db.getFest(cfg)
@@ -596,8 +547,8 @@ func (in *input) setFest(db *DB, cfg config) error {
 	return nil
 }
 
-func (in *input) cocktailMenu(db *DB) error {
-	items := []string{"create cocktail [c]", "show cocktails [s]", "alter cocktail [a]", "delete cocktail [d]", "main Menu [press enter]"}
+func (in *input) inventoryMenu(db *DB) error {
+	items := []string{"list inventory [l]", "add item [i]", "change availability[a]", "change price [d]", "delete item [d]", "main Menu [press enter]"}
 	for _, i := range items {
 		fmt.Fprintf(in.w, "%s\n", i)
 	}
@@ -608,40 +559,26 @@ func (in *input) cocktailMenu(db *DB) error {
 	}
 
 	switch {
-	case c == "c":
-	case c == "s":
-	case c == "a":
-	case c == "d":
-	default:
-	}
-	return nil
-}
-
-func (in *input) festMenu(db *DB) error {
-	items := []string{"show current fest [c]", "print current fest to file [p]", "select cocktails [s]", "alter selection [a]", "generate shopping list [g]", "show last fests [l]", "main Menu [press enter]"}
-	for _, i := range items {
-		fmt.Fprintf(in.w, "%s\n", i)
-	}
-
-	c, err := in.getString("Choice: ")
-	if err != nil {
-		return err
-	}
-
-	switch {
-	case c == "c":
-	case c == "p":
-	case c == "s":
-	case c == "a":
-	case c == "g":
 	case c == "l":
+		in.listInventory(db)
+	case c == "i":
+		in.addInventory(db)
+	case c == "a":
+		in.updateAvailability(db)
+	case c == "p":
+		in.updatePrice(db)
+	case c == "d":
+		//TODO: add delete function
+	case c == "":
+		return nil
 	default:
+		return fmt.Errorf("%s is not a valid choice.", c)
 	}
+
 	return nil
 }
-
-func (in *input) mainMenu(db *DB, cfg config) error {
-	items := []string{"create cocktail [c]", "update inventory [u]", "set fest cocktails [s]", "generate shopping list [g]", "quit [q]"}
+func (in *input) cocktailMenu(db *DB) error {
+	items := []string{"create cocktail [c]", "list cocktails [l]", "alter cocktail [a]", "delete cocktail [d]", "main Menu [press enter]"}
 	for _, i := range items {
 		fmt.Fprintf(in.w, "%s\n", i)
 	}
@@ -654,10 +591,37 @@ func (in *input) mainMenu(db *DB, cfg config) error {
 	switch {
 	case c == "c":
 		in.createCocktail(db)
-	case c == "u":
-		in.updateInventory(db)
+	case c == "l":
+		//TODO: write function show cocktail
+	case c == "a":
+		//TODO: write function alter cocktail
+	case c == "d":
+		//TODO: write function delete cocktail
+	default:
+	}
+	return nil
+}
+
+func (in *input) festMenu(db *DB) error {
+	items := []string{"show current fest [c]", "print current fest to file [p]", "select cocktails [s]", "alter current selection [a]", "generate shopping list [g]", "show last fests [l]", "main Menu [press enter]"}
+	for _, i := range items {
+		fmt.Fprintf(in.w, "%s\n", i)
+	}
+
+	c, err := in.getString("Choice: ")
+	if err != nil {
+		return err
+	}
+
+	switch {
+	case c == "c":
+		//TODO: add function current Fest
+	case c == "p":
+		//TODO: add function print Fest
 	case c == "s":
-		in.setFest(db, cfg)
+		in.setFest(db)
+	case c == "a":
+		//TODO: add function to alter current selection
 	case c == "g":
 		shoppinglist, pricelist, err := db.genShoppingList(cfg)
 		if err != nil {
@@ -667,6 +631,31 @@ func (in *input) mainMenu(db *DB, cfg config) error {
 		err = in.printLists(shoppinglist, pricelist)
 		in.w.Flush()
 		return err
+	case c == "l":
+		//TODO: add function last Fest
+	default:
+	}
+	return nil
+}
+
+func (in *input) mainMenu(db *DB, cfg config) error {
+	items := []string{"add/delete/alter/… cocktails [c]", "modify/print inventory [u]", "modify/print fest[s]", "quit [q]"}
+	for _, i := range items {
+		fmt.Fprintf(in.w, "%s\n", i)
+	}
+
+	c, err := in.getString("Choice: ")
+	if err != nil {
+		return err
+	}
+
+	switch {
+	case c == "c":
+		in.cocktailMenu(db)
+	case c == "u":
+		in.inventoryMenu(db)
+	case c == "s":
+		in.festMenu(db)
 	case c == "q":
 		in.w.Flush()
 		return nil

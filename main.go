@@ -756,9 +756,4 @@ func main() {
 		}
 		fmt.Println(err)
 	}
-
-	//	createCocktail(db)
-	//	addInventory(db)
-	//	liste, pricelist := genShoppingList(db)
-	//  fmt.Println(liste, pricelist)
 }

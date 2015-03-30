@@ -596,6 +596,50 @@ func (in *input) setFest(db *DB, cfg config) error {
 	return nil
 }
 
+func (in *input) cocktailMenu(db *DB) error {
+	items := []string{"create cocktail [c]", "show cocktails [s]", "alter cocktail [a]", "delete cocktail [d]", "main Menu [press enter]"}
+	for _, i := range items {
+		fmt.Fprintf(in.w, "%s\n", i)
+	}
+
+	c, err := in.getString("Choice: ")
+	if err != nil {
+		return err
+	}
+
+	switch {
+	case c == "c":
+	case c == "s":
+	case c == "a":
+	case c == "d":
+	default:
+	}
+	return nil
+}
+
+func (in *input) festMenu(db *DB) error {
+	items := []string{"show current fest [c]", "print current fest to file [p]", "select cocktails [s]", "alter selection [a]", "generate shopping list [g]", "show last fests [l]", "main Menu [press enter]"}
+	for _, i := range items {
+		fmt.Fprintf(in.w, "%s\n", i)
+	}
+
+	c, err := in.getString("Choice: ")
+	if err != nil {
+		return err
+	}
+
+	switch {
+	case c == "c":
+	case c == "p":
+	case c == "s":
+	case c == "a":
+	case c == "g":
+	case c == "l":
+	default:
+	}
+	return nil
+}
+
 func (in *input) mainMenu(db *DB, cfg config) error {
 	items := []string{"create cocktail [c]", "update inventory [u]", "set fest cocktails [s]", "generate shopping list [g]", "quit [q]"}
 	for _, i := range items {
@@ -604,7 +648,7 @@ func (in *input) mainMenu(db *DB, cfg config) error {
 
 	c, err := in.getString("Choice: ")
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	switch {

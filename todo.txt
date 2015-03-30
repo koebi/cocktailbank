@@ -1,0 +1,15 @@
+currently, the writer of an input is just a writer.
+could change that to a tabwriter, and then use that everytime I tabwrite stuff
+added comment //tabwriter everywhere this should be
+
+add method to query current inventory value
+
+move errorhandling to "top" by returning errors everywhere
+
+restructure code flow:
+	add menus for handling inventory, fest, cocktails
+	move menu-code into own file
+	move database-code (code dealing only with database) to own file
+	move code for handling inventory, fest, cocktails to own file
+
+

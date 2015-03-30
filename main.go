@@ -27,18 +27,25 @@ type cocktail struct {
 	ingredients map[string]float64
 }
 
+func newCocktail() cocktail {
+	return cocktail{
+		ingredients: make(map[string]float64),
+	}
+}
+
 type fest struct {
-	date           string
-	cocktails      map[string]float64
-	cocktailprices map[string]float64
+	date            string
+	cocktails       []string
+	cocktailprices  map[string]float64
+	cocktailamounts map[string]float64
 }
 
 //TODO: implement type shoppinglist
 
 func newFest() fest {
 	return fest{
-		cocktails:      make(map[string]float64),
-		cocktailprices: make(map[string]float64),
+		cocktailprices:  make(map[string]float64),
+		cocktailamounts: make(map[string]float64),
 	}
 }
 
@@ -48,18 +55,19 @@ type DB struct {
 
 type input struct {
 	s *bufio.Scanner
-	w io.Writer
+	w *tabwriter.Writer
 }
 
 func newInput(r io.Reader, w io.Writer) *input {
 	return &input{
 		bufio.NewScanner(r),
-		w,
+		tabwriter.NewWriter(w, 0, 8, 0, '\t', 0),
 	}
 }
 
 func (in *input) getString(prompt string, values ...interface{}) (string, error) {
 	fmt.Fprintf(in.w, prompt, values...)
+	in.w.Flush()
 
 	if !in.s.Scan() {
 		return "", in.s.Err()
@@ -69,6 +77,7 @@ func (in *input) getString(prompt string, values ...interface{}) (string, error)
 
 func (in *input) getFloat(prompt string, values ...interface{}) (float64, error) {
 	fmt.Fprintf(in.w, prompt, values...)
+	in.w.Flush()
 
 	if !in.s.Scan() {
 		return 0, in.s.Err()
@@ -83,6 +92,7 @@ func (in *input) getFloat(prompt string, values ...interface{}) (float64, error)
 
 func (in *input) getInt(prompt string, values ...interface{}) (int, error) {
 	fmt.Fprintf(in.w, prompt, values...)
+	in.w.Flush()
 
 	if !in.s.Scan() {
 		return 0, in.s.Err()
@@ -122,15 +132,42 @@ func (in *input) getIngredients() (ingredients map[string]float64, err error) {
 }
 
 func (in *input) createCocktail(db *DB) error {
-	var c cocktail
+	c := newCocktail()
 	var err error
 	c.name, err = in.getString("Name: ")
 	if err != nil {
 		return err
 	}
-	c.ingredients, err = in.getIngredients()
+
+	fmt.Fprintf(in.w, "Currently available ingredients:\n")
+	inventory := db.getInventory()
+	var numberedInv []string
+
+	for item := range inventory {
+		numberedInv = append(numberedInv, item)
+	}
+
+	for i, item := range numberedInv {
+		fmt.Printf("%d\t%s\n", i, item)
+	}
+
+	choice, err := in.getString("Select the ingredients of %s [separate with ',', q to quit]:", c.name)
 	if err != nil {
 		return err
+	}
+	for _, i := range strings.Split(choice, ",") {
+		if i == "q" {
+			return fmt.Errorf("No cocktail created")
+		}
+		id, err := strconv.Atoi(i)
+		if err != nil {
+			return err
+		}
+		amount, err := in.getFloat("amount for %s [l]: ", numberedInv[id])
+		if err != nil {
+			return err
+		}
+		c.ingredients[numberedInv[id]] = amount
 	}
 
 	err = db.insertCocktail(c)
@@ -277,7 +314,7 @@ func (db *DB) getCocktails() ([]cocktail, error) {
 	var cocktails []cocktail
 
 	for rows.Next() {
-		var c cocktail
+		c := newCocktail()
 
 		if err := rows.Scan(&c.name); err != nil {
 			return nil, err
@@ -380,12 +417,7 @@ func (in *input) updateAvailability(db *DB) {
 		log.Fatal(err)
 	}
 
-	fmt.Printf("%T, %T", numberedInv[update], avail)
-	fmt.Printf("UPDATE inventory SET available = %f WHERE name = %s", avail, numberedInv[update])
-	res, err := db.Exec("UPDATE inventory SET available = $1 WHERE name = $2;", avail, numberedInv[update])
-	id, lasterr := res.LastInsertId()
-	aff, rowserr := res.RowsAffected()
-	fmt.Println(id, lasterr, aff, rowserr, err)
+	_, err = db.Exec("UPDATE inventory SET available = $1 WHERE name = $2;", avail, numberedInv[update])
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -424,12 +456,27 @@ func (db *DB) getFest(cfg config) (fest, error) {
 		if err := rows.Scan(&c, &a, &p); err != nil {
 			return newFest(), err
 		}
-		f.cocktails[c] = a
+		f.cocktails = append(f.cocktails, c)
+		f.cocktailamounts[c] = a
 		f.cocktailprices[c] = p
 	}
 	rows.Close()
 
 	return f, nil
+}
+
+func (in *input) listInventory(db *DB) {
+	inventory := db.getInventory()
+
+	fmt.Fprintf(in.w, "number\tingredient\tavailable\n")
+
+	id := 0
+	for item, val := range inventory {
+		fmt.Fprintf(in.w, "%d\t%s\t%.2f\n", id, item, val)
+		id += 1
+	}
+
+	in.w.Flush()
 }
 
 func (db *DB) genShoppingList(cfg config) (shoppinglist map[string]float64, pricelist map[string]float64, err error) {
@@ -447,7 +494,7 @@ func (db *DB) genShoppingList(cfg config) (shoppinglist map[string]float64, pric
 
 	for _, c := range cocktails {
 		for z, m := range c.ingredients {
-			shoppinglist[z] += f.cocktails[c.name] * m
+			shoppinglist[z] += f.cocktailamounts[c.name] * m
 		}
 	}
 
@@ -469,7 +516,7 @@ func (db *DB) genShoppingList(cfg config) (shoppinglist map[string]float64, pric
 }
 
 func (in *input) updateInventory(db *DB) {
-	items := []string{"add item [i]", "change availability [a]", "change price [p]"}
+	items := []string{"add item [i]", "change availability [a]", "change price [p]", "list inventory [l]"}
 	for _, i := range items {
 		fmt.Println(i)
 	}
@@ -486,23 +533,34 @@ func (in *input) updateInventory(db *DB) {
 		in.updateAvailability(db)
 	case c == "p":
 		in.updatePrice(db)
+	case c == "l":
+		in.listInventory(db)
 	}
 }
 
 func (in *input) setFest(db *DB, cfg config) error {
-	fmt.Println("Choose cocktails. Available: ")
-
-	cocktails, err := db.getCocktails()
-	if err != nil {
-		return err
-	}
+	fmt.Println("Current selection:")
 	fest, err := db.getFest(cfg)
 	if err != nil {
 		return err
 	}
 
+	fmt.Fprintf(in.w, "%s\t%s\t%s\n", "cocktail", "planned", "price")
+	for i, c := range fest.cocktails {
+		fmt.Fprintf(in.w, "%d %s\t%.2f\t%.2f €\n", i, c, fest.cocktailamounts[c], fest.cocktailprices[c]/100)
+	}
+
+	fmt.Fprintf(in.w, "Choose cocktails. Available: \n")
+
+	cocktails, err := db.getCocktails()
+	if err != nil {
+		return err
+	}
+
 	for i, c := range cocktails {
-		fmt.Println(i, c.name)
+		if _, ok := fest.cocktailamounts[c.name]; !ok {
+			fmt.Fprintf(in.w, "%d\t%s\n", i, c.name)
+		}
 	}
 
 	choice, err := in.getString("Separate choice with ',': ")
@@ -512,6 +570,7 @@ func (in *input) setFest(db *DB, cfg config) error {
 
 	//TODO: change to Update, if Cocktail already selected.
 	//      delete if neccessary
+	//      note that there should be an option to unselect cocktails
 	stmt, err := db.Prepare("INSERT INTO fests (date, cocktails, price, amount) values ($1, $2, $3, $4)")
 	if err != nil {
 		return err
@@ -540,7 +599,7 @@ func (in *input) setFest(db *DB, cfg config) error {
 func (in *input) mainMenu(db *DB, cfg config) error {
 	items := []string{"create cocktail [c]", "update inventory [u]", "set fest cocktails [s]", "generate shopping list [g]", "quit [q]"}
 	for _, i := range items {
-		fmt.Println(i)
+		fmt.Fprintf(in.w, "%s\n", i)
 	}
 
 	c, err := in.getString("Choice: ")
@@ -558,29 +617,30 @@ func (in *input) mainMenu(db *DB, cfg config) error {
 	case c == "g":
 		shoppinglist, pricelist, err := db.genShoppingList(cfg)
 		if err != nil {
+			in.w.Flush()
 			return err
 		}
-		err = printLists(shoppinglist, pricelist)
+		err = in.printLists(shoppinglist, pricelist)
+		in.w.Flush()
 		return err
 	case c == "q":
+		in.w.Flush()
 		return nil
 	default:
+		in.w.Flush()
 		return fmt.Errorf("No valid choice, try again…")
 	}
-
-	return fmt.Errorf("control reached end of function mainMenu")
+	in.w.Flush()
+	return fmt.Errorf("What do you want to do next?")
 }
 
-func printLists(l1 map[string]float64, l2 map[string]float64) error {
-	w := new(tabwriter.Writer)
-
-	w.Init(os.Stdout, 0, 8, 0, '\t', 0)
-	fmt.Fprintf(w, "ingredient\tamount\tprice\n")
+func (in *input) printLists(l1 map[string]float64, l2 map[string]float64) error {
+	fmt.Fprintf(in.w, "ingredient\tamount\tprice\n")
 
 	for name, menge := range l1 {
-		fmt.Fprintf(w, "%s\t%.2f\t%.2f\n", name, menge, l2[name])
+		fmt.Fprintf(in.w, "%s\t%.2f\t%.2f\n", name, menge, l2[name])
 	}
-	w.Flush()
+	in.w.Flush()
 	return nil
 }
 

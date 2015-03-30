@@ -16,6 +16,8 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
+var cfg config
+
 type config struct {
 	Current  string
 	Last     string
@@ -413,7 +415,7 @@ func (in *input) updatePrice(db *DB) {
 	}
 }
 
-func (db *DB) getFest(cfg config) (fest, error) {
+func (db *DB) getFest() (fest, error) {
 	f := newFest()
 	f.date = cfg.Current
 
@@ -453,13 +455,13 @@ func (in *input) listInventory(db *DB) {
 	in.w.Flush()
 }
 
-func (db *DB) genShoppingList(cfg config) (shoppinglist map[string]float64, pricelist map[string]float64, err error) {
+func (db *DB) genShoppingList() (shoppinglist map[string]float64, pricelist map[string]float64, err error) {
 	cocktails, err := db.getCocktails()
 	if err != nil {
 		return nil, nil, err
 	}
 	inventory := db.getInventory()
-	f, err := db.getFest(cfg)
+	f, err := db.getFest()
 	if err != nil {
 		return nil, nil, err
 	}
@@ -489,9 +491,9 @@ func (db *DB) genShoppingList(cfg config) (shoppinglist map[string]float64, pric
 	return shoppinglist, pricelist, nil
 }
 
-func (in *input) setFest(db *DB, cfg config) error {
+func (in *input) setFest(db *DB) error {
 	fmt.Println("Current selection:")
-	fest, err := db.getFest(cfg)
+	fest, err := db.getFest()
 	if err != nil {
 		return err
 	}
@@ -569,6 +571,7 @@ func (in *input) inventoryMenu(db *DB) error {
 		in.updatePrice(db)
 	case c == "d":
 		//TODO: add delete function
+		return fmt.Errorf("function not implemented yet")
 	case c == "":
 		return nil
 	default:
@@ -577,6 +580,22 @@ func (in *input) inventoryMenu(db *DB) error {
 
 	return nil
 }
+
+func (in *input) showCocktails(db *DB) error {
+	fmt.Fprintf(in.w, "Currently available cocktails:\n")
+
+	cocktails, err := db.getCocktails()
+	if err != nil {
+		return err
+	}
+
+	for i, c := range cocktails {
+		fmt.Fprintf(in.w, "%d\t%s\n", i, c.name)
+	}
+
+	return nil
+}
+
 func (in *input) cocktailMenu(db *DB) error {
 	items := []string{"create cocktail [c]", "list cocktails [l]", "alter cocktail [a]", "delete cocktail [d]", "main Menu [press enter]"}
 	for _, i := range items {
@@ -592,11 +611,14 @@ func (in *input) cocktailMenu(db *DB) error {
 	case c == "c":
 		in.createCocktail(db)
 	case c == "l":
-		//TODO: write function show cocktail
+		err := in.showCocktails(db)
+		return err
 	case c == "a":
 		//TODO: write function alter cocktail
+		return fmt.Errorf("function not implemented yet")
 	case c == "d":
 		//TODO: write function delete cocktail
+		return fmt.Errorf("function not implemented yet")
 	default:
 	}
 	return nil
@@ -616,14 +638,17 @@ func (in *input) festMenu(db *DB) error {
 	switch {
 	case c == "c":
 		//TODO: add function current Fest
+		return fmt.Errorf("function not implemented yet")
 	case c == "p":
 		//TODO: add function print Fest
+		return fmt.Errorf("function not implemented yet")
 	case c == "s":
 		in.setFest(db)
 	case c == "a":
 		//TODO: add function to alter current selection
+		return fmt.Errorf("function not implemented yet")
 	case c == "g":
-		shoppinglist, pricelist, err := db.genShoppingList(cfg)
+		shoppinglist, pricelist, err := db.genShoppingList()
 		if err != nil {
 			in.w.Flush()
 			return err
@@ -633,12 +658,13 @@ func (in *input) festMenu(db *DB) error {
 		return err
 	case c == "l":
 		//TODO: add function last Fest
+		return fmt.Errorf("function not implemented yet")
 	default:
 	}
 	return nil
 }
 
-func (in *input) mainMenu(db *DB, cfg config) error {
+func (in *input) mainMenu(db *DB) error {
 	items := []string{"add/delete/alter/… cocktails [c]", "modify/print inventory [u]", "modify/print fest[s]", "quit [q]"}
 	for _, i := range items {
 		fmt.Fprintf(in.w, "%s\n", i)
@@ -707,7 +733,6 @@ func main() {
 	//parsing config
 	configLocation := "config.toml"
 
-	var cfg config
 	if _, err := toml.DecodeFile(configLocation, &cfg); err != nil {
 		fmt.Println("Config-File at location", configLocation, "not found, exiting")
 		fmt.Println(err)
@@ -725,7 +750,7 @@ func main() {
 
 	//main loop running the menu until quit.
 	for {
-		err := in.mainMenu(db, cfg)
+		err := in.mainMenu(db)
 		if err == nil {
 			return
 		}

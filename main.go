@@ -533,7 +533,7 @@ func (in *input) setFest(db *DB) error {
 		if err != nil {
 			return err
 		}
-		price, err := in.getFloat("What's the price for a %s? ", cocktails[id].name)
+		price, err := in.getFloat("What's the price for a %s [ct]? ", cocktails[id].name)
 		if err != nil {
 			return err
 		}
@@ -811,6 +811,6 @@ func main() {
 		if err == nil {
 			return
 		}
-		fmt.Println(err)
+		fmt.Fprintf(in.w, "\n%s\n\n", err)
 	}
 }

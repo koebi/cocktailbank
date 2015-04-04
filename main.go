@@ -415,9 +415,56 @@ func (in *input) updatePrice(db *DB) {
 	}
 }
 
-func (db *DB) getFest() (fest, error) {
+func (db *DB) festDates() (dates []string, err error) {
+	rows, err := db.Query("SELECT date FROM fests;")
+	if err != nil {
+		return nil, err
+	}
+
+	for rows.Next() {
+		var d string
+
+		if err := rows.Scan(&d); err != nil {
+			return nil, err
+		}
+		dates = append(dates, d)
+	}
+	return dates, nil
+}
+
+func (in *input) lastFest(db *DB) error {
+	fmt.Fprintf(in.w, "Select a fest. Currently available:\n")
+
+	dates, err := db.festDates()
+	if err != nil {
+		return err
+	}
+
+	for i, d := range dates {
+		fmt.Fprintf(in.w, "%d %s\n", i, d)
+	}
+
+	id, err := in.getInt("Which fest do you want to see?\n")
+	if err != nil {
+		return err
+	}
+
+	fest, err := db.getFest(dates[id])
+	if err != nil {
+		return err
+	}
+
+	fmt.Fprintf(in.w, "Cocktails\tplanned\tprice\n")
+	for c, a := range fest.cocktailamounts {
+		fmt.Fprintf(in.w, "%s\t%.2f\t%2f\n", c, a, fest.cocktailprices[c])
+	}
+
+	return nil
+}
+
+func (db *DB) getFest(date string) (fest, error) {
 	f := newFest()
-	f.date = cfg.Current
+	f.date = date
 
 	rows, err := db.Query("SELECT cocktails, amount, price FROM fests WHERE date = $1", f.date)
 	if err != nil {
@@ -461,7 +508,7 @@ func (db *DB) genShoppingList() (shoppinglist map[string]float64, pricelist map[
 		return nil, nil, err
 	}
 	inventory := db.getInventory()
-	f, err := db.getFest()
+	f, err := db.getFest(cfg.Current)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -493,7 +540,7 @@ func (db *DB) genShoppingList() (shoppinglist map[string]float64, pricelist map[
 
 func (in *input) setFest(db *DB) error {
 	fmt.Fprintf(in.w, "Current selection:\n")
-	fest, err := db.getFest()
+	fest, err := db.getFest(cfg.Current)
 	if err != nil {
 		return err
 	}
@@ -547,7 +594,7 @@ func (in *input) setFest(db *DB) error {
 }
 
 func (db *DB) festCocktail(name string, price float64, amount int) error {
-	fest, err := db.getFest()
+	fest, err := db.getFest(cfg.Current)
 	if err != nil {
 		return err
 	}
@@ -656,7 +703,7 @@ func (in *input) cocktailMenu(db *DB) error {
 
 func (in *input) currentFest(db *DB) error {
 	fmt.Fprintf(in.w, "Current selection:\n")
-	fest, err := db.getFest()
+	fest, err := db.getFest(cfg.Current)
 	if err != nil {
 		return err
 	}
@@ -681,12 +728,10 @@ func (in *input) festMenu(db *DB) error {
 
 	switch {
 	case c == "c":
-		//TODO: add function current Fest
 		err := in.currentFest(db)
 		if err != nil {
 			return err
 		}
-		return fmt.Errorf("function not implemented yet")
 	case c == "p":
 		//TODO: add function print Fest
 		return fmt.Errorf("function not implemented yet")
@@ -694,7 +739,10 @@ func (in *input) festMenu(db *DB) error {
 		in.setFest(db)
 	case c == "a":
 		//TODO: add function to alter current selection
-		return fmt.Errorf("function not implemented yet")
+		err = in.lastFest(db)
+		if err != nil {
+			return err
+		}
 	case c == "g":
 		shoppinglist, pricelist, err := db.genShoppingList()
 		if err != nil {

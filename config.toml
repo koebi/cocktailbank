@@ -2,4 +2,5 @@
 
 Current = "SS 15"
 Awaited = 1200
+Schema = "/home/koebi/go/src/github.com/koebi/cocktailbank/schema.sql"
 Database = "/home/koebi/go/src/github.com/koebi/cocktailbank/fest.sqlite"

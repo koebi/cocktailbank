@@ -20,6 +20,7 @@ var cfg config
 
 type config struct {
 	Awaited  int
+	Schema   string
 	Current  string
 	Database string
 }
@@ -240,6 +241,33 @@ func (db *DB) initDB() error {
 	if err != nil {
 		tx.Rollback()
 		return err
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (db *DB) initDBByFile() error {
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+
+	schema, err := ioutil.ReadFile(cfg.Schema)
+	if err != nil {
+		return err
+	}
+
+	for byteQuery := range bytes.SplitAfter(schema, ";") {
+		_, err = tx.Exec(string(byteQuery))
+		if err != nil {
+			tx.Rollback()
+			return err
+		}
 	}
 
 	err = tx.Commit()

@@ -253,34 +253,6 @@ func (db *DB) initDB() error {
 	return nil
 }
 
-func (db *DB) initDBByFile() error {
-	tx, err := db.Begin()
-	if err != nil {
-		return err
-	}
-
-	schema, err := ioutil.ReadFile(cfg.Schema)
-	if err != nil {
-		return err
-	}
-
-	for _, byteQuery := range bytes.SplitAfter(schema, []byte(";")) {
-		fmt.Println(byteQuery, string(byteQuery))
-		_, err = tx.Exec(string(byteQuery))
-		if err != nil {
-			tx.Rollback()
-			return err
-		}
-	}
-
-	err = tx.Commit()
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
 func (db *DB) cocktailIngredients(cocktail string) (ingredients map[string]float64, err error) {
 
 	rows, err := db.Query("SELECT id FROM cocktails WHERE name = $1", cocktail)
@@ -938,9 +910,7 @@ func createOrOpenDB(database string) (*DB, error) {
 		} else if err != nil {
 			return nil, err
 		} else {
-			if err = db.initDBByFile(); err != nil {
-				return nil, err
-			}
+			fmt.Println("There is a schema-file included, use it!")
 		}
 
 		return db, nil

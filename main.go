@@ -19,8 +19,8 @@ import (
 var cfg config
 
 type config struct {
+	Awaited  int
 	Current  string
-	Last     string
 	Database string
 }
 
@@ -38,16 +38,16 @@ func newCocktail() cocktail {
 type fest struct {
 	date            string
 	cocktails       []string
-	cocktailprices  map[string]float64
-	cocktailamounts map[string]float64
+	cocktailprices  map[string]int
+	cocktailamounts map[string]int
 }
 
 //TODO: implement type shoppinglist
 
 func newFest() fest {
 	return fest{
-		cocktailprices:  make(map[string]float64),
-		cocktailamounts: make(map[string]float64),
+		cocktailprices:  make(map[string]int),
+		cocktailamounts: make(map[string]int),
 	}
 }
 
@@ -502,8 +502,8 @@ func (db *DB) getFest(date string) (fest, error) {
 
 	for rows.Next() {
 		var c string
-		var a float64
-		var p float64
+		var a int
+		var p int
 
 		if err := rows.Scan(&c, &a, &p); err != nil {
 			return newFest(), err
@@ -557,7 +557,7 @@ func (db *DB) genShoppingList() (shoppinglist map[string]float64, pricelist map[
 
 	for _, c := range cocktails {
 		for z, m := range c.ingredients {
-			shoppinglist[z] += f.cocktailamounts[c.name] * m
+			shoppinglist[z] += float64(f.cocktailamounts[c.name]) * m
 		}
 	}
 
@@ -675,7 +675,7 @@ func (in *input) getInventoryValue(db *DB) error {
 		val += a * prices[i]
 	}
 
-	fmt.Fprintf(in.w, "Current inventory value: %.2f", val)
+	fmt.Fprintf(in.w, "Current inventory value: %.2f €\n", val/100)
 	return nil
 }
 
@@ -775,8 +775,24 @@ func (in *input) currentFest(db *DB) error {
 
 	fmt.Fprintf(in.w, "%s\t%s\t%s\n", "cocktail", "planned", "price")
 	for i, c := range fest.cocktails {
-		fmt.Fprintf(in.w, "%d %s\t%.2f\t%.2f €\n", i, c, fest.cocktailamounts[c], fest.cocktailprices[c]/100)
+		fmt.Fprintf(in.w, "%d %s\t%d\t%.2f €\n", i, c, fest.cocktailamounts[c], float64(fest.cocktailprices[c])/100.0)
 	}
+
+	var allcs int
+	for _, a := range fest.cocktailamounts {
+		allcs += a
+	}
+	ratio := float64(allcs) / float64(cfg.Awaited)
+
+	fmt.Fprintf(in.w, "You are currently planning for %d cocktails and %d guests. That makes for %.2f cocktails/guest\n", allcs, cfg.Awaited, ratio)
+	if ratio <= 1.6 {
+		fmt.Fprintf(in.w, "This ratio should be around 2, it is a bit low.\n")
+	} else if ratio >= 2.4 {
+		fmt.Fprintf(in.w, "This ratio should be around 2, it is a bit high.\n")
+	} else {
+		fmt.Fprintf(in.w, "This ratio should be around 2, so, it is looking good. Remember not to calculate for too many people ;)\n")
+	}
+
 	return nil
 }
 
@@ -866,7 +882,7 @@ func (in *input) printLists(l1 map[string]float64, l2 map[string]float64) error 
 	fmt.Fprintf(in.w, "ingredient\tamount\tprice\n")
 
 	for name, menge := range l1 {
-		fmt.Fprintf(in.w, "%s\t%.2f\t%.2f\n", name, menge, l2[name])
+		fmt.Fprintf(in.w, "%s\t%.2f\t%.2f €\n", name, menge, l2[name]/100)
 	}
 	in.w.Flush()
 	return nil

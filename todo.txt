@@ -4,6 +4,8 @@ add magic calculation of cocktailamounts…
 
 we need some way to calculate "Eigenbedarf"
 
+we have to track the awaited guests somewhere…
+
 change error-value for quitting, so you only quit when you quit
 
 add method to query current inventory value

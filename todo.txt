@@ -1,5 +1,9 @@
 add flag to parse config location
 
+add magic calculation of cocktailamounts…
+
+we need some way to calculate "Eigenbedarf"
+
 change error-value for quitting, so you only quit when you quit
 
 add method to query current inventory value

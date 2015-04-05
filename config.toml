@@ -1,5 +1,5 @@
 # config-file for cocktailbank
 
 Current = "SS 15"
-Last = "WS 14/15"
+Awaited = 1200
 Database = "/home/koebi/go/src/github.com/koebi/cocktailbank/fest.sqlite"

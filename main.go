@@ -2,9 +2,11 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"database/sql"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"os"
 	"strconv"
@@ -262,7 +264,8 @@ func (db *DB) initDBByFile() error {
 		return err
 	}
 
-	for byteQuery := range bytes.SplitAfter(schema, ";") {
+	for _, byteQuery := range bytes.SplitAfter(schema, []byte(";")) {
+		fmt.Println(byteQuery, string(byteQuery))
 		_, err = tx.Exec(string(byteQuery))
 		if err != nil {
 			tx.Rollback()
@@ -513,7 +516,7 @@ func (in *input) lastFest(db *DB) error {
 
 	fmt.Fprintf(in.w, "Cocktails\tplanned\tprice\n")
 	for c, a := range fest.cocktailamounts {
-		fmt.Fprintf(in.w, "%s\t%.2f\t%2f €\n", c, a, fest.cocktailprices[c]/100)
+		fmt.Fprintf(in.w, "%s\t%d\t%2f €\n", c, a, float64(fest.cocktailprices[c])/100.0)
 	}
 
 	return nil
@@ -618,7 +621,7 @@ func (in *input) setFest(db *DB) error {
 
 	fmt.Fprintf(in.w, "%s\t%s\t%s\n", "cocktail", "planned", "price")
 	for i, c := range fest.cocktails {
-		fmt.Fprintf(in.w, "%d %s\t%.2f\t%.2f €\n", i, c, fest.cocktailamounts[c], fest.cocktailprices[c]/100)
+		fmt.Fprintf(in.w, "%d %s\t%d\t%.2f €\n", i, c, fest.cocktailamounts[c], float64(fest.cocktailprices[c])/100.0)
 	}
 
 	fmt.Fprintf(in.w, "Choose cocktails. Available: \n")
@@ -735,7 +738,7 @@ func (in *input) inventoryMenu(db *DB) error {
 	case c == "":
 		return nil
 	default:
-		return fmt.Errorf("%s is not a valid choice.", c)
+		return fmt.Errorf("%s is not a valid choice", c)
 	}
 
 	return nil
@@ -926,9 +929,20 @@ func createOrOpenDB(database string) (*DB, error) {
 			return nil, err
 		}
 		db := &DB{tmp}
-		if err = db.initDB(); err != nil {
+
+		_, err = os.Stat(cfg.Schema)
+		if os.IsNotExist(err) {
+			if err = db.initDB(); err != nil {
+				return nil, err
+			}
+		} else if err != nil {
 			return nil, err
+		} else {
+			if err = db.initDBByFile(); err != nil {
+				return nil, err
+			}
 		}
+
 		return db, nil
 	} else if err != nil {
 		return nil, err

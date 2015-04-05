@@ -1,6 +1,6 @@
 CREATE TABLE cocktails (
 	-- cocktails contains all cocktails available
-	
+
 	-- id is a sequential identifier
 	id INTEGER NOT NULL PRIMARY KEY ASC AUTOINCREMENT,
 	-- name is the name of the cocktail

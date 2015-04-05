@@ -116,7 +116,10 @@ func (in *input) createCocktail(db *DB) error {
 	}
 
 	fmt.Fprintf(in.w, "Currently available ingredients:\n")
-	inventory := db.getInventory()
+	inventory, err := db.getInventory()
+	if err != nil {
+		return err
+	}
 	var numberedInv []string
 
 	for item := range inventory {
@@ -327,12 +330,12 @@ func (in *input) addInventory(db *DB) {
 	}
 }
 
-func (db *DB) getInventory() (inventory map[string]float64) {
+func (db *DB) getInventory() (inventory map[string]float64, err error) {
 	inventory = make(map[string]float64)
 
 	rows, err := db.Query("SELECT name, available FROM inventory")
 	if err != nil {
-		log.Fatal("selecting inventory failed", err)
+		return nil, err
 	}
 
 	for rows.Next() {
@@ -340,21 +343,21 @@ func (db *DB) getInventory() (inventory map[string]float64) {
 		var v float64
 
 		if err := rows.Scan(&n, &v); err != nil {
-			log.Fatal("scanning rows failed:", err)
+			return nil, err
 		}
 		inventory[n] = v
 	}
 	rows.Close()
 
-	return inventory
+	return inventory, err
 }
 
-func (db *DB) getInventoryPriceList() (prices map[string]float64) {
+func (db *DB) getInventoryPriceList() (prices map[string]float64, err error) {
 	prices = make(map[string]float64)
 
 	rows, err := db.Query("SELECT name, price FROM inventory")
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 
 	for rows.Next() {
@@ -362,17 +365,20 @@ func (db *DB) getInventoryPriceList() (prices map[string]float64) {
 		var p float64
 
 		if err := rows.Scan(&n, &p); err != nil {
-			log.Fatal(err)
+			return nil, err
 		}
 		prices[n] = p
 	}
 	rows.Close()
 
-	return prices
+	return prices, nil
 }
 
-func (in *input) updateAvailability(db *DB) {
-	inventory := db.getInventory()
+func (in *input) updateAvailability(db *DB) error {
+	inventory, err := db.getInventory()
+	if err != nil {
+		return err
+	}
 	var numberedInv []string
 
 	for item := range inventory {
@@ -380,39 +386,62 @@ func (in *input) updateAvailability(db *DB) {
 	}
 
 	for i, item := range numberedInv {
-		fmt.Printf("%d: %s\t%.2f\n", i, item, inventory[item])
+		fmt.Fprintf(in.w, "%d: %s\t%.2f\n", i, item, inventory[item])
 	}
 
 	update, err := in.getInt("Which item do you want to update? ")
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	avail, err := in.getFloat("How much is available? [l]: ")
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	_, err = db.Exec("UPDATE inventory SET available = $1 WHERE name = $2;", avail, numberedInv[update])
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
+	return nil
 }
 
-func (in *input) updatePrice(db *DB) {
-	name, err := in.getString("Name: ")
+func (in *input) updatePrice(db *DB) error {
+	inventory, err := db.getInventory()
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
-	price, err := in.getInt("Preis [ct]: ")
+	prices, err := db.getInventoryPriceList()
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
-	_, err = db.Exec("UPDATE inventory SET price = $2 WHERE name = $1", name, price)
-	if err != nil {
-		log.Fatal(err)
+	var numberedInv []string
+
+	for item := range inventory {
+		numberedInv = append(numberedInv, item)
 	}
+	fmt.Fprintf(in.w, "   cocktail\tprice\n")
+	for i, item := range numberedInv {
+		fmt.Fprintf(in.w, "%d: %s\t%.2f\n", i, item, prices[item])
+	}
+
+	update, err := in.getInt("Which item do you want to update? ")
+	if err != nil {
+		return err
+	}
+
+	price, err := in.getFloat("What is the current price? [ct]: ")
+	if err != nil {
+		return err
+	}
+
+	_, err = db.Exec("UPDATE inventory SET price = $1 WHERE name = $2;", price, numberedInv[update])
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (db *DB) festDates() (dates []string, err error) {
@@ -456,7 +485,7 @@ func (in *input) lastFest(db *DB) error {
 
 	fmt.Fprintf(in.w, "Cocktails\tplanned\tprice\n")
 	for c, a := range fest.cocktailamounts {
-		fmt.Fprintf(in.w, "%s\t%.2f\t%2f\n", c, a, fest.cocktailprices[c])
+		fmt.Fprintf(in.w, "%s\t%.2f\t%2f €\n", c, a, fest.cocktailprices[c]/100)
 	}
 
 	return nil
@@ -488,18 +517,26 @@ func (db *DB) getFest(date string) (fest, error) {
 	return f, nil
 }
 
-func (in *input) listInventory(db *DB) {
-	inventory := db.getInventory()
+func (in *input) listInventory(db *DB) error {
+	inventory, err := db.getInventory()
+	if err != nil {
+		return err
+	}
+	prices, err := db.getInventoryPriceList()
+	if err != nil {
+		return err
+	}
 
-	fmt.Fprintf(in.w, "number\tingredient\tavailable\n")
+	fmt.Fprintf(in.w, "number\tingredient\tavailable\tprice\n")
 
 	id := 0
 	for item, val := range inventory {
-		fmt.Fprintf(in.w, "%d\t%s\t%.2f\n", id, item, val)
-		id += 1
+		fmt.Fprintf(in.w, "%d\t%s\t%.2f\t%.2f €\n", id, item, val, prices[item]/100)
+		id++
 	}
 
 	in.w.Flush()
+	return nil
 }
 
 func (db *DB) genShoppingList() (shoppinglist map[string]float64, pricelist map[string]float64, err error) {
@@ -507,7 +544,10 @@ func (db *DB) genShoppingList() (shoppinglist map[string]float64, pricelist map[
 	if err != nil {
 		return nil, nil, err
 	}
-	inventory := db.getInventory()
+	inventory, err := db.getInventory()
+	if err != nil {
+		return nil, nil, err
+	}
 	f, err := db.getFest(cfg.Current)
 	if err != nil {
 		return nil, nil, err
@@ -528,7 +568,10 @@ func (db *DB) genShoppingList() (shoppinglist map[string]float64, pricelist map[
 		}
 	}
 
-	prices := db.getInventoryPriceList()
+	prices, err := db.getInventoryPriceList()
+	if err != nil {
+		return nil, nil, err
+	}
 	pricelist = make(map[string]float64)
 
 	for z, m := range shoppinglist {
@@ -616,8 +659,28 @@ func (db *DB) festCocktail(name string, price float64, amount int) error {
 	return nil
 }
 
+func (in *input) getInventoryValue(db *DB) error {
+	inventory, err := db.getInventory()
+	if err != nil {
+		return err
+	}
+	prices, err := db.getInventoryPriceList()
+	if err != nil {
+		return err
+	}
+
+	var val float64
+
+	for i, a := range inventory {
+		val += a * prices[i]
+	}
+
+	fmt.Fprintf(in.w, "Current inventory value: %.2f", val)
+	return nil
+}
+
 func (in *input) inventoryMenu(db *DB) error {
-	items := []string{"list inventory [l]", "add item [i]", "change availability[a]", "change price [d]", "delete item [d]", "main Menu [press enter]"}
+	items := []string{"list inventory [l]", "query inventory value [v]", "add item [i]", "change availability[a]", "change price [p]", "delete item [d]", "main Menu [press enter]"}
 	for _, i := range items {
 		fmt.Fprintf(in.w, "%s\n", i)
 	}
@@ -630,6 +693,8 @@ func (in *input) inventoryMenu(db *DB) error {
 	switch {
 	case c == "l":
 		in.listInventory(db)
+	case c == "v":
+		in.getInventoryValue(db)
 	case c == "i":
 		in.addInventory(db)
 	case c == "a":
@@ -739,10 +804,7 @@ func (in *input) festMenu(db *DB) error {
 		in.setFest(db)
 	case c == "a":
 		//TODO: add function to alter current selection
-		err = in.lastFest(db)
-		if err != nil {
-			return err
-		}
+		return fmt.Errorf("function not implemented yet")
 	case c == "g":
 		shoppinglist, pricelist, err := db.genShoppingList()
 		if err != nil {
@@ -753,8 +815,10 @@ func (in *input) festMenu(db *DB) error {
 		in.w.Flush()
 		return err
 	case c == "l":
-		//TODO: add function last Fest
-		return fmt.Errorf("function not implemented yet")
+		err := in.lastFest(db)
+		if err != nil {
+			return err
+		}
 	default:
 	}
 	return nil

@@ -2,11 +2,9 @@ package main
 
 import (
 	"bufio"
-	"bytes"
 	"database/sql"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"os"
 	"strconv"
@@ -313,24 +311,25 @@ func (db *DB) getCocktails() ([]cocktail, error) {
 	return cocktails, nil
 }
 
-func (in *input) addInventory(db *DB) {
+func (in *input) addInventory(db *DB) error {
 	name, err := in.getString("name: ")
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	avail, err := in.getFloat("available [l]: ")
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	price, err := in.getInt("price [ct]: ")
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	_, err = db.Exec("INSERT INTO inventory (name, available, price) VALUES ($1, $2, $3)", name, avail, price)
 	if err != nil {
-		log.Fatal("Adding Inventory entry failed:", err)
+		return err
 	}
+	return nil
 }
 
 func (db *DB) getInventory() (inventory map[string]float64, err error) {
@@ -682,6 +681,34 @@ func (in *input) getInventoryValue(db *DB) error {
 	return nil
 }
 
+func (in *input) deleteInventory(db *DB) error {
+	inventory, err := db.getInventory()
+	if err != nil {
+		return err
+	}
+	var numberedInv []string
+
+	for item := range inventory {
+		numberedInv = append(numberedInv, item)
+	}
+
+	for i, item := range numberedInv {
+		fmt.Fprintf(in.w, "%d: %s\t%.2f\n", i, item, inventory[item])
+	}
+
+	delete, err := in.getInt("Which item do you want to update? ")
+	if err != nil {
+		return err
+	}
+
+	_, err = db.Exec("DELETE FROM inventory WHERE name = $1 LIMIT 1", numberedInv[delete])
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (in *input) inventoryMenu(db *DB) error {
 	items := []string{"list inventory [l]", "query inventory value [v]", "add item [i]", "change availability[a]", "change price [p]", "delete item [d]", "main Menu [press enter]"}
 	for _, i := range items {
@@ -695,18 +722,29 @@ func (in *input) inventoryMenu(db *DB) error {
 
 	switch {
 	case c == "l":
-		in.listInventory(db)
+		if err = in.listInventory(db); err != nil {
+			return err
+		}
 	case c == "v":
-		in.getInventoryValue(db)
+		if err = in.getInventoryValue(db); err != nil {
+			return err
+		}
 	case c == "i":
-		in.addInventory(db)
+		if err = in.addInventory(db); err != nil {
+			return err
+		}
 	case c == "a":
-		in.updateAvailability(db)
+		if err = in.updateAvailability(db); err != nil {
+			return err
+		}
 	case c == "p":
-		in.updatePrice(db)
+		if err = in.updatePrice(db); err != nil {
+			return err
+		}
 	case c == "d":
-		//TODO: add delete function
-		return fmt.Errorf("function not implemented yet")
+		if err = in.deleteInventory(db); err != nil {
+			return err
+		}
 	case c == "":
 		return nil
 	default:

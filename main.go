@@ -6,7 +6,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"strconv"
 	"strings"
@@ -1215,7 +1214,8 @@ func main() {
 	//creating/opening database
 	db, err := createOrOpenDB(cfg.Database)
 	if err != nil {
-		log.Fatal(err)
+		fmt.Println(err)
+		return
 	}
 
 	//main loop running the menu until quit.

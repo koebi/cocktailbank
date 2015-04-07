@@ -17,10 +17,6 @@ we have to track the awaited guests somewhere…
 
 change error-value for quitting, so you only quit when you quit
 
-add method to query current inventory value
-
-move errorhandling to "top" by returning errors everywhere
-
 restructure code flow:
 	move menu-code into own file
 	move database-code (code dealing only with database) to own file

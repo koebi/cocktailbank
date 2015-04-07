@@ -616,8 +616,6 @@ func (in *input) setFest(db *DB) error {
 			return err
 		}
 
-		//TODO: use fest.cocktails instead of fest.cocktailamounts[]
-		//      I am currently not quite sure how to do ,ok with arrays…
 		for i, c := range cocktails {
 			if _, ok := fest.cocktailamounts[c.name]; !ok {
 				fmt.Fprintf(in.w, "%d\t%s\n", i, c.name)

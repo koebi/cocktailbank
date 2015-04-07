@@ -1119,7 +1119,7 @@ func (in *input) festMenu(db *DB) error {
 }
 
 func (in *input) mainMenu(db *DB) error {
-	items := []string{"add/delete/alter/… cocktails [c]", "modify/print inventory [u]", "modify/print fest[s]", "quit [q]"}
+	items := []string{"add/delete/alter/… cocktails [c]", "modify/print inventory [u]", "modify/print fest [f]", "quit [q]"}
 	for _, i := range items {
 		fmt.Fprintf(in.w, "%s\n", i)
 	}
@@ -1140,7 +1140,7 @@ func (in *input) mainMenu(db *DB) error {
 		if err != nil {
 			return err
 		}
-	case c == "s":
+	case c == "f":
 		err := in.festMenu(db)
 		if err != nil {
 			return err

@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"database/sql"
+	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -17,6 +18,10 @@ import (
 )
 
 var cfg config
+
+var (
+	configLocation = flag.String("config", "config.toml", "location of the config file")
+)
 
 type config struct {
 	Awaited  int
@@ -1196,12 +1201,10 @@ func createOrOpenDB(database string) (*DB, error) {
 }
 
 func main() {
+	flag.Parse()
 
-	//parsing config
-	configLocation := "config.toml"
-
-	if _, err := toml.DecodeFile(configLocation, &cfg); err != nil {
-		fmt.Println("Config-File at location", configLocation, "not found, exiting")
+	if _, err := toml.DecodeFile(*configLocation, &cfg); err != nil {
+		fmt.Println("Config-File at location", *configLocation, "not found, exiting")
 		fmt.Println(err)
 		return
 	}

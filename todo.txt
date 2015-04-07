@@ -1,5 +1,3 @@
-add flag to parse config location
-
 identify cocktails by id somehow
 
 add magic calculation of cocktailamounts…

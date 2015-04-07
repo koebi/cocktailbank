@@ -43,8 +43,6 @@ type fest struct {
 	cocktailamounts map[string]int
 }
 
-//TODO: implement type shoppinglist
-
 func newFest() fest {
 	return fest{
 		cocktailprices:  make(map[string]int),
@@ -969,6 +967,59 @@ func (in *input) alterIngredients(name string, db *DB) error {
 	return nil
 }
 
+func (in *input) deleteCocktail(db *DB) error {
+	cocktails, err := db.getCocktails()
+
+	fmt.Fprintf(in.w, "Currently available cocktails:\n")
+
+	for i, c := range cocktails {
+		fmt.Fprintf(in.w, "%d %s\n", i, c)
+	}
+
+	id, err := in.getInt("Which cocktail do you want to delete? ")
+	if err != nil {
+		return err
+	}
+
+	err = db.deleteCocktail(cocktails[id].name)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (db *DB) deleteCocktail(name string) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	var id int
+	err = tx.QueryRow("SELECT id FROM cocktails WHERE name = $1", name).Scan(&id)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec("DELETE FROM cocktails WHERE name = $1 LIMIT 1", name)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec("DELETE FROM ingredients WHERE cocktail = $1", id)
+	if err != nil {
+		return err
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (in *input) cocktailMenu(db *DB) error {
 	items := []string{"create cocktail [c]", "list cocktails [l]", "alter cocktail [a]", "delete cocktail [d]", "main Menu [press enter]"}
 	for _, i := range items {
@@ -990,8 +1041,7 @@ func (in *input) cocktailMenu(db *DB) error {
 		err = in.alterCocktail(db)
 		return err
 	case c == "d":
-		//TODO: write function delete cocktail
-		return fmt.Errorf("function not implemented yet")
+		err = in.deleteCocktail(db)
 	default:
 	}
 	return nil

@@ -595,62 +595,92 @@ func (in *input) setFest(db *DB) error {
 		fmt.Fprintf(in.w, "%d %s\t%d\t%.2f €\n", i, c, fest.cocktailamounts[c], float64(fest.cocktailprices[c])/100.0)
 	}
 
-	fmt.Fprintf(in.w, "Choose cocktails. Available: \n")
-
-	cocktails, err := db.getCocktails()
+	add, err := in.getString("Do you want to [a]dd or [d]eselect a cocktails? ")
 	if err != nil {
 		return err
 	}
 
-	//TODO: use fest.cocktails instead of fest.cocktailamounts[]
-	//      I am currently not quite sure how to do ,ok with arrays…
-	for i, c := range cocktails {
-		if _, ok := fest.cocktailamounts[c.name]; !ok {
-			fmt.Fprintf(in.w, "%d\t%s\n", i, c.name)
+	if add == "d" {
+		sel, err := in.getInt("Which cocktail do you want to deselect? ")
+		if err != nil {
+			return err
 		}
+		err = db.festCocktail(fest.cocktails[sel], 0, 0, true)
+		if err != nil {
+			return err
+		}
+		return nil
+	} else if add == "a" {
+		fmt.Fprintf(in.w, "Choose cocktails. Available: \n")
+
+		cocktails, err := db.getCocktails()
+		if err != nil {
+			return err
+		}
+
+		//TODO: use fest.cocktails instead of fest.cocktailamounts[]
+		//      I am currently not quite sure how to do ,ok with arrays…
+		for i, c := range cocktails {
+			if _, ok := fest.cocktailamounts[c.name]; !ok {
+				fmt.Fprintf(in.w, "%d\t%s\n", i, c.name)
+			}
+		}
+
+		choice, err := in.getString("Separate choice with ',': ")
+		if err != nil {
+			return err
+		}
+
+		for _, c := range strings.Split(choice, ",") {
+			id, err := strconv.Atoi(c)
+			if err != nil {
+				return err
+			}
+
+			amount, err := in.getInt("How many %s are you planning for? ", cocktails[id].name)
+			if err != nil {
+				return err
+			}
+			price, err := in.getFloat("What's the price for a %s [ct]? ", cocktails[id].name)
+			if err != nil {
+				return err
+			}
+
+			err = db.festCocktail(cocktails[id].name, price, amount, false)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
 	}
 
-	choice, err := in.getString("Separate choice with ',': ")
-	if err != nil {
-		return err
-	}
-
-	for _, c := range strings.Split(choice, ",") {
-		id, err := strconv.Atoi(c)
-		if err != nil {
-			return err
-		}
-
-		amount, err := in.getInt("How many %s are you planning for? ", cocktails[id].name)
-		if err != nil {
-			return err
-		}
-		price, err := in.getFloat("What's the price for a %s [ct]? ", cocktails[id].name)
-		if err != nil {
-			return err
-		}
-
-		err = db.festCocktail(cocktails[id].name, price, amount)
-		if err != nil {
-			return err
-		}
-	}
 	return nil
 }
 
-func (db *DB) festCocktail(name string, price float64, amount int) error {
+func (db *DB) festCocktail(name string, price float64, amount int, del bool) error {
 	fest, err := db.getFest(cfg.Current)
 	if err != nil {
 		return err
 	}
 
-	for _, c := range fest.cocktails {
-		if c == name {
-			_, err := db.Exec("UPDATE fests SET price = $1, amount = $2 WHERE cocktails = $3", price, amount, name)
-			if err != nil {
-				return err
+	if del == false {
+		for _, c := range fest.cocktails {
+			if c == name {
+				_, err := db.Exec("UPDATE fests SET price = $1, amount = $2 WHERE cocktails = $3 AND date = $4", price, amount, name, cfg.Current)
+				if err != nil {
+					return err
+				}
+				return nil
 			}
-			return nil
+		}
+	} else {
+		for _, c := range fest.cocktails {
+			if c == name {
+				_, err := db.Exec("DELETE FROM fests WHERE cocktails = $1 AND date = $2", name, cfg.Current)
+				if err != nil {
+					return err
+				}
+			}
 		}
 	}
 
@@ -998,7 +1028,7 @@ func (in *input) currentFest(db *DB) error {
 }
 
 func (in *input) festMenu(db *DB) error {
-	items := []string{"show current fest [c]", "print current fest to file [p]", "select cocktails [s]", "alter current selection [a]", "generate shopping list [g]", "show last fests [l]", "main Menu [press enter]"}
+	items := []string{"show current fest [c]", "alter current selection [a]", "generate shopping list [g]", "show last fests [l]", "main Menu [press enter]"}
 	for _, i := range items {
 		fmt.Fprintf(in.w, "%s\n", i)
 	}
@@ -1014,14 +1044,8 @@ func (in *input) festMenu(db *DB) error {
 		if err != nil {
 			return err
 		}
-	case c == "p":
-		//TODO: add function print Fest
-		return fmt.Errorf("function not implemented yet")
-	case c == "s":
-		in.setFest(db)
 	case c == "a":
-		//TODO: add function to alter current selection
-		return fmt.Errorf("function not implemented yet")
+		in.setFest(db)
 	case c == "g":
 		shoppinglist, pricelist, err := db.genShoppingList()
 		if err != nil {

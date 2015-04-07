@@ -779,6 +779,166 @@ func (in *input) showCocktails(db *DB) error {
 	return nil
 }
 
+func (db *DB) updateCocktailName(oldName, newName string) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	var id int
+	err = tx.QueryRow("SELECT id FROM cocktails WHERE name = $1", oldName).Scan(&id)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec("UPDATE cocktails SET name = $1 WHERE id = $2", newName, id)
+	if err != nil {
+		return err
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (db *DB) updateIngredients(cocktail, ing string, amount float64) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	var id int
+	err = tx.QueryRow("SELECT id FROM cocktails WHERE name = $1", cocktail).Scan(&id)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec("UPDATE ingredients SET amount = $1 WHERE cocktail = $2 AND name = $3", amount, id, ing)
+	if err != nil {
+		return err
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (in *input) alterCocktail(db *DB) error {
+	fmt.Fprintf(in.w, "Currently available cocktails:\n")
+
+	cocktails, err := db.getCocktails()
+	if err != nil {
+		return err
+	}
+
+	for i, c := range cocktails {
+		fmt.Fprintf(in.w, "%d\t%s\n", i, c.name)
+	}
+
+	alter, err := in.getString("Alter [n]ame or [i]ngredients? ")
+	if err != nil {
+		return err
+	}
+
+	switch {
+	case alter == "n":
+		err = in.alterCocktailName(db)
+		return err
+	case alter == "i":
+		alter, err := in.getInt("Which one would you like to alter? ")
+		if err != nil {
+			return err
+		}
+
+		err = in.alterIngredients(cocktails[alter].name, db)
+		return err
+	default:
+		return fmt.Errorf("%s is not a valid Choice", alter)
+	}
+
+	return nil
+}
+
+func (in *input) alterCocktailName(db *DB) error {
+	fmt.Fprintf(in.w, "Currently available cocktails:\n")
+
+	cocktails, err := db.getCocktails()
+	if err != nil {
+		return err
+	}
+
+	for i, c := range cocktails {
+		fmt.Fprintf(in.w, "%d\t%s\n", i, c.name)
+	}
+
+	alter, err := in.getInt("Which one would you like to alter? ")
+	if err != nil {
+		return err
+	}
+
+	newName, err := in.getString("What is %s actually called? ", cocktails[alter].name)
+	if err != nil {
+		return err
+	}
+
+	err = db.updateCocktailName(cocktails[alter].name, newName)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (in *input) alterIngredients(name string, db *DB) error {
+	cocktails, err := db.getCocktails()
+	if err != nil {
+		return err
+	}
+
+	var alterct int
+	for i, c := range cocktails {
+		if c.name == name {
+			alterct = i
+		}
+	}
+
+	fmt.Fprintf(in.w, "Current Ingredients for %s:\n", cocktails[alterct].name)
+
+	var numberedIngreds []string
+	for ing := range cocktails[alterct].ingredients {
+		numberedIngreds = append(numberedIngreds, ing)
+	}
+
+	for i, ing := range numberedIngreds {
+		fmt.Fprintf(in.w, "%d %s\t%.2f l\n", i, ing, cocktails[alterct].ingredients[ing])
+	}
+
+	alter, err := in.getInt("Which ingredient do you want to alter? ")
+	if err != nil {
+		return err
+	}
+
+	amount, err := in.getFloat("How much %s is actually needed [l]? ", numberedIngreds[alter])
+	if err != nil {
+		return err
+	}
+
+	err = db.updateIngredients(cocktails[alterct].name, numberedIngreds[alter], amount)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (in *input) cocktailMenu(db *DB) error {
 	items := []string{"create cocktail [c]", "list cocktails [l]", "alter cocktail [a]", "delete cocktail [d]", "main Menu [press enter]"}
 	for _, i := range items {
@@ -794,11 +954,11 @@ func (in *input) cocktailMenu(db *DB) error {
 	case c == "c":
 		in.createCocktail(db)
 	case c == "l":
-		err := in.showCocktails(db)
+		err = in.showCocktails(db)
 		return err
 	case c == "a":
-		//TODO: write function alter cocktail
-		return fmt.Errorf("function not implemented yet")
+		err = in.alterCocktail(db)
+		return err
 	case c == "d":
 		//TODO: write function delete cocktail
 		return fmt.Errorf("function not implemented yet")

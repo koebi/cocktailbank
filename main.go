@@ -166,24 +166,12 @@ func (db *DB) insertCocktail(c cocktail) error {
 	}
 	defer tx.Rollback()
 
-	_, err = tx.Exec("INSERT INTO cocktails (name) values ($1);", c.name)
+	res, err = tx.Exec("INSERT INTO cocktails (name) values ($1);", c.name)
 	if err != nil {
 		return err
 	}
 
-	rows, err := tx.Query("SELECT id FROM cocktails WHERE name = $1;", c.name)
-	if err != nil {
-		return err
-	}
-
-	var id int
-	for rows.Next() {
-		err = rows.Scan(&id)
-		if err != nil {
-			return err
-		}
-	}
-	rows.Close()
+	id := res.LastInsertId()
 
 	stmt, err := tx.Prepare("INSERT INTO ingredients (name, amount, cocktail) values($1, $2, $3)")
 	if err != nil {

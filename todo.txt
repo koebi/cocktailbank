@@ -1,6 +1,3 @@
-identify cocktails by id somehow
-and fix that it currently uses text in database or something…
-
 add magic calculation of cocktailamounts…
 
 we need some way to calculate "Eigenbedarf"

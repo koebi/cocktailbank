@@ -243,7 +243,8 @@ func (db *DB) initDB() error {
 
 func (db *DB) cocktailIngredients(cocktail string) (ingredients map[string]float64, err error) {
 
-	rows, err := db.Query("SELECT id FROM cocktails WHERE name = $1", cocktail)
+	var id int
+	err := db.QueryRow("SELECT id FROM cocktails WHERE name = $1", cocktail).Scan(&id)
 	if err != nil {
 		return nil, err
 	}

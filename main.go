@@ -166,12 +166,15 @@ func (db *DB) insertCocktail(c cocktail) error {
 	}
 	defer tx.Rollback()
 
-	res, err = tx.Exec("INSERT INTO cocktails (name) values ($1);", c.name)
+	res, err := tx.Exec("INSERT INTO cocktails (name) values ($1);", c.name)
 	if err != nil {
 		return err
 	}
 
-	id := res.LastInsertId()
+	id, err := res.LastInsertId()
+	if err != nil {
+		return err
+	}
 
 	stmt, err := tx.Prepare("INSERT INTO ingredients (name, amount, cocktail) values($1, $2, $3)")
 	if err != nil {
@@ -244,20 +247,12 @@ func (db *DB) initDB() error {
 func (db *DB) cocktailIngredients(cocktail string) (ingredients map[string]float64, err error) {
 
 	var id int
-	err := db.QueryRow("SELECT id FROM cocktails WHERE name = $1", cocktail).Scan(&id)
+	err = db.QueryRow("SELECT id FROM cocktails WHERE name = $1", cocktail).Scan(&id)
 	if err != nil {
 		return nil, err
 	}
 
-	var id int
-	for rows.Next() {
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-	}
-	rows.Close()
-
-	rows, err = db.Query("SELECT name, amount FROM ingredients WHERE cocktail = $1", id)
+	rows, err := db.Query("SELECT name, amount FROM ingredients WHERE cocktail = $1", id)
 	if err != nil {
 		return nil, err
 	}
@@ -494,11 +489,16 @@ func (db *DB) getFest(date string) (fest, error) {
 	}
 
 	for rows.Next() {
+		var id int
 		var c string
 		var a int
 		var p int
 
-		if err := rows.Scan(&c, &a, &p); err != nil {
+		if err := rows.Scan(&id, &a, &p); err != nil {
+			return newFest(), err
+		}
+		err = db.QueryRow("SELECT name FROM cocktails WHERE id = $1", id).Scan(&c)
+		if err != nil {
 			return newFest(), err
 		}
 		f.cocktails = append(f.cocktails, c)
@@ -652,10 +652,16 @@ func (db *DB) festCocktail(name string, price float64, amount int, del bool) err
 		return err
 	}
 
-	if del == false {
+	var id int
+	err = db.QueryRow("SELECT id FROM cocktails WHERE name = $1", name).Scan(&id)
+	if err != nil {
+		return err
+	}
+
+	if del == true {
 		for _, c := range fest.cocktails {
 			if c == name {
-				_, err := db.Exec("UPDATE fests SET price = $1, amount = $2 WHERE cocktails = $3 AND date = $4", price, amount, name, cfg.Current)
+				_, err := db.Exec("DELETE FROM fests WHERE cocktails = $1 AND date = $2", id, cfg.Current)
 				if err != nil {
 					return err
 				}
@@ -665,15 +671,16 @@ func (db *DB) festCocktail(name string, price float64, amount int, del bool) err
 	} else {
 		for _, c := range fest.cocktails {
 			if c == name {
-				_, err := db.Exec("DELETE FROM fests WHERE cocktails = $1 AND date = $2", name, cfg.Current)
+				_, err := db.Exec("UPDATE fests SET price = $1, amount = $2 WHERE cocktails = $3 AND date = $4", price, amount, id, cfg.Current)
 				if err != nil {
 					return err
 				}
+				return nil
 			}
 		}
 	}
 
-	_, err = db.Exec("INSERT INTO fests (date, cocktails, price, amount) values ($1, $2, $3, $4)", cfg.Current, name, price, amount)
+	_, err = db.Exec("INSERT INTO fests (date, cocktails, price, amount) values ($1, $2, $3, $4)", cfg.Current, id, price, amount)
 	if err != nil {
 		return err
 	}
@@ -1086,7 +1093,10 @@ func (in *input) festMenu(db *DB) error {
 			return err
 		}
 	case c == "a":
-		in.setFest(db)
+		err := in.setFest(db)
+		if err != nil {
+			return err
+		}
 	case c == "g":
 		shoppinglist, pricelist, err := db.genShoppingList()
 		if err != nil {

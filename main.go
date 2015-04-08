@@ -586,7 +586,7 @@ func (in *input) setFest(db *DB) error {
 		fmt.Fprintf(in.w, "%d %s\t%d\t%.2f €\n", i, c, fest.cocktailamounts[c], float64(fest.cocktailprices[c])/100.0)
 	}
 
-	add, err := in.getString("Do you want to [a]dd or [d]eselect a cocktails? ")
+	add, err := in.getString("Do you want to [a]dd, [c]hange or [d]eselect a cocktails? ")
 	if err != nil {
 		return err
 	}
@@ -600,7 +600,25 @@ func (in *input) setFest(db *DB) error {
 		if err != nil {
 			return err
 		}
-		return nil
+	} else if add == "c" {
+		sel, err := in.getInt("Which cocktail do you want to change? ")
+		if err != nil {
+			return err
+		}
+
+		amount, err := in.getFloat("How many %s are you planning for? ", fest.cocktails[sel])
+		if err != nil {
+			return err
+		}
+		price, err := in.getInt("What's the price for a %s [ct]? ", fest.cocktails[sel])
+		if err != nil {
+			return err
+		}
+
+		err = db.festCocktail(fest.cocktails[sel], amount, price, false)
+		if err != nil {
+			return err
+		}
 	} else if add == "a" {
 		fmt.Fprintf(in.w, "Choose cocktails. Available: \n")
 
@@ -640,9 +658,7 @@ func (in *input) setFest(db *DB) error {
 				return err
 			}
 		}
-		return nil
 	}
-
 	return nil
 }
 

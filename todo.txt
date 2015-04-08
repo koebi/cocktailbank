@@ -3,8 +3,6 @@ add magic calculation of cocktailamounts…
 we need some way to calculate "Eigenbedarf"
 
 check if festMenu is still able to change planned/price for cocktails…
-… and find out why it doesn't work as intended
-
 
 maybe introduce a type shoppinglist?
 

@@ -1,18 +1,14 @@
+PRIORITY ∞ 
+==========
+rewrite database with schema in schema.sql
+
+
+PRIORITY n
+==========
 add magic calculation of cocktailamounts…
 
 we need some way to calculate "Eigenbedarf"
 
-check if festMenu is still able to change planned/price for cocktails…
-
 maybe introduce a type shoppinglist?
 
-we have to track the awaited guests somewhere…
-	maybe add another field to database, and also track some other information
-	also, ask for how many guests to be planned for, when querying this value…
-
 change error-value for quitting, so you only quit when you quit
-
-restructure code flow:
-	move menu-code into own file
-	move database-code (code dealing only with database) to own file
-	move code for handling inventory, fest, cocktails to own file

@@ -20,10 +20,9 @@ CREATE TABLE ingredients (
 	price INTEGER DEFAULT 0,
 	--
 	PRIMARY KEY(id),
-
 );
 
-CREATE TABLE cocktailingredients {
+CREATE TABLE cocktailingredients (
 	-- cocktailingredients maps ingredients to cocktails
 
 	-- ingredient references the ingredient in TABLE ingredients
@@ -36,8 +35,7 @@ CREATE TABLE cocktailingredients {
 	PRIMARY KEY(ingredient, cocktail),
 	FOREIGN KEY(ingredient) REFERENCES ingredients(id),
 	FOREIGN KEY(cocktail) REFERENCES cocktails(id),
-
-};
+);
 
 CREATE TABLE stock (
 	-- inventory contains all inventory items

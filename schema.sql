@@ -1,28 +1,28 @@
-CREATE TABLE cocktails (
+CREATE TABLE cocktails(
 	-- cocktails contains all cocktails available
 
 	-- id is a sequential identifier
-	id INTEGER NOT NULL PRIMARY KEY ASC AUTOINCREMENT,
+	id INTEGER,
 	-- name is the name of the cocktail
 	name TEXT,
 	--
-	PRIMARY KEY(id),
+	PRIMARY KEY(id)
 );
 
-CREATE TABLE ingredients (
+CREATE TABLE ingredients(
 	-- ingredients lists all ingredients of cocktails
 
 	-- id is a sequential identifier
-	id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+	id INTEGER,
 	-- name is the name of the ingredient
 	name TEXT,
 	-- price gives the current buying price in cents for one liter
 	price INTEGER DEFAULT 0,
 	--
-	PRIMARY KEY(id),
+	PRIMARY KEY(id)
 );
 
-CREATE TABLE cocktailingredients (
+CREATE TABLE cocktailingredients(
 	-- cocktailingredients maps ingredients to cocktails
 
 	-- ingredient references the ingredient in TABLE ingredients
@@ -34,10 +34,10 @@ CREATE TABLE cocktailingredients (
 	--
 	PRIMARY KEY(ingredient, cocktail),
 	FOREIGN KEY(ingredient) REFERENCES ingredients(id),
-	FOREIGN KEY(cocktail) REFERENCES cocktails(id),
+	FOREIGN KEY(cocktail) REFERENCES cocktails(id)
 );
 
-CREATE TABLE stock (
+CREATE TABLE stock(
 	-- inventory contains all inventory items
 	-- the code makes sure that all inventory only exists once
 
@@ -49,10 +49,10 @@ CREATE TABLE stock (
 	available FLOAT DEFAULT 0.0,
 	--
 	PRIMARY KEY(ingredient, date),
-	FOREIGN KEY ingredient REFERENCES ingredients(id),
+	FOREIGN KEY(ingredient) REFERENCES ingredients(id)
 );
 
-CREATE TABLE fests (
+CREATE TABLE fests(
 	-- fests contains all cocktails of all fests
 
 	-- id is a sequential identifier
@@ -62,10 +62,10 @@ CREATE TABLE fests (
 	-- awaited is the number of people that are awaited for this fest
 	awaited INTEGER,
 	--
-	PRIMARY KEY(id),
+	PRIMARY KEY(id)
 );
 
-CREATE TABLE festcocktails (
+CREATE TABLE festcocktails(
 	-- festcocktails maps cocktails to fests
 
 	-- fest references the fest in TABLE fests
@@ -77,7 +77,7 @@ CREATE TABLE festcocktails (
 	-- amount is how many cocktails are planned in this given fest
 	amount INTEGER DEFAULT 0,
 	--
-	PRIMARY KEY(fest, cocktail),
+	PRIMARY KEY(fest, cocktails),
 	FOREIGN KEY(fest) REFERENCES fests(id),
 	FOREIGN KEY(cocktails) REFERENCES cocktails(id)
 );

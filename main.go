@@ -3,10 +3,12 @@ package main
 import (
 	"bufio"
 	"database/sql"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"strconv"
 	"strings"
 	"text/tabwriter"
@@ -17,6 +19,8 @@ import (
 )
 
 var cfg config
+
+var errMenuFinished = errors.New("what do you want to do next?")
 
 var (
 	configLocation = flag.String("config", "config.toml", "location of the config file")
@@ -119,17 +123,12 @@ func (in *input) createCocktail(db *DB) error {
 	}
 
 	fmt.Fprintf(in.w, "Currently available ingredients:\n")
-	inventory, err := db.getInventory()
+	ingreds, err := db.getIngredients()
 	if err != nil {
 		return err
 	}
-	var numberedInv []string
 
-	for item := range inventory {
-		numberedInv = append(numberedInv, item)
-	}
-
-	for i, item := range numberedInv {
+	for i, item := range ingreds {
 		fmt.Printf("%d\t%s\n", i, item)
 	}
 
@@ -145,11 +144,11 @@ func (in *input) createCocktail(db *DB) error {
 		if err != nil {
 			return err
 		}
-		amount, err := in.getFloat("amount for %s [l]: ", numberedInv[id])
+		amount, err := in.getFloat("amount for %s [l]: ", ingreds[id])
 		if err != nil {
 			return err
 		}
-		c.ingredients[numberedInv[id]] = amount
+		c.ingredients[ingreds[id]] = amount
 	}
 
 	err = db.insertCocktail(c)
@@ -176,23 +175,13 @@ func (db *DB) insertCocktail(c cocktail) error {
 		return err
 	}
 
-	stmt, err := tx.Prepare("INSERT INTO ingredients (name, amount, cocktail) values($1, $2, $3)")
-	if err != nil {
-		return err
-	}
-
-	st, err := tx.Prepare("INSERT INTO inventory (name) values($1)")
+	stmt, err := tx.Prepare("INSERT INTO cocktailingredients SET ingredient = (SELECT id FROM ingredients WHERE name = $1), amount = $2, cocktail = $3")
 	if err != nil {
 		return err
 	}
 
 	for zutat, amount := range c.ingredients {
 		_, err := stmt.Exec(zutat, amount, id)
-		if err != nil {
-			return err
-		}
-
-		_, err = st.Exec(zutat)
 		if err != nil {
 			return err
 		}
@@ -205,39 +194,18 @@ func (db *DB) insertCocktail(c cocktail) error {
 	return nil
 }
 
-func (db *DB) initDB() error {
-	tx, err := db.Begin()
+func initDB() error {
+	cmd := exec.Command("sqlite3", "fest.sqlite")
+	f, err := os.Open("schema.sql")
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer f.Close()
 
-	_, err = tx.Exec("CREATE TABLE cocktails (id INTEGER NOT NULL PRIMARY KEY ASC AUTOINCREMENT, name TEXT);")
+	cmd.Stdin = f
+	out, err := cmd.CombinedOutput()
 	if err != nil {
-		tx.Rollback()
-		return err
-	}
-
-	_, err = tx.Exec("CREATE TABLE ingredients (name TEXT, amount FLOAT, cocktail INT);")
-	if err != nil {
-		tx.Rollback()
-		return err
-	}
-
-	_, err = tx.Exec("CREATE TABLE inventory (name TEXT UNIQUE ON CONFLICT IGNORE, available FLOAT DEFAULT 0.0, price INTEGER DEFAULT 0);")
-	if err != nil {
-		tx.Rollback()
-		return err
-	}
-
-	_, err = tx.Exec("CREATE TABLE fests (date TEXT, cocktails INTEGER, price INTEGER DEFAULT 0, amount INTEGER DEFAULT 0);")
-	if err != nil {
-		tx.Rollback()
-		return err
-	}
-
-	err = tx.Commit()
-	if err != nil {
+		fmt.Println(string(out))
 		return err
 	}
 
@@ -252,7 +220,7 @@ func (db *DB) cocktailIngredients(cocktail string) (ingredients map[string]float
 		return nil, err
 	}
 
-	rows, err := db.Query("SELECT name, amount FROM ingredients WHERE cocktail = $1", id)
+	rows, err := db.Query("SELECT ingredients.name, cocktailingredients.amount	FROM cocktailingredients JOIN ingredients ON ingredients.id = cocktailingredients.ingredient WHERE cocktail = $1", id)
 	if err != nil {
 		return nil, err
 	}
@@ -298,83 +266,97 @@ func (db *DB) getCocktails() ([]cocktail, error) {
 }
 
 func (in *input) addInventory(db *DB) error {
-	name, err := in.getString("name: ")
+	name, err := in.getString("name of ingredient: ")
 	if err != nil {
 		return err
 	}
-	avail, err := in.getFloat("available [l]: ")
-	if err != nil {
-		return err
-	}
-	price, err := in.getInt("price [ct]: ")
+	price, err := in.getInt("price [ct/l]: ")
 	if err != nil {
 		return err
 	}
 
-	_, err = db.Exec("INSERT INTO inventory (name, available, price) VALUES ($1, $2, $3)", name, avail, price)
+	_, err = db.Exec("INSERT INTO ingredients (name, price) VALUES ($1, $2)", name, price)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func (db *DB) getInventory() (inventory map[string]float64, err error) {
-	inventory = make(map[string]float64)
-
-	rows, err := db.Query("SELECT name, available FROM inventory")
+func (db *DB) getIngredients() ([]string, error) {
+	var ingredients []string
+	rows, err := db.Query("SELECT name FROM ingredients")
 	if err != nil {
 		return nil, err
 	}
 
 	for rows.Next() {
-		var n string
-		var v float64
+		var ing string
 
-		if err := rows.Scan(&n, &v); err != nil {
+		if err := rows.Scan(&ing); err != nil {
 			return nil, err
 		}
-		inventory[n] = v
+		ingredients = append(ingredients, ing)
 	}
-	rows.Close()
-
-	return inventory, err
+	return ingredients, nil
 }
 
-func (db *DB) getInventoryPriceList() (prices map[string]float64, err error) {
-	prices = make(map[string]float64)
-
-	rows, err := db.Query("SELECT name, price FROM inventory")
+func (db *DB) getIngredientPrices() (map[string]int, error) {
+	prices := make(map[string]int)
+	rows, err := db.Query("SELECT name, price FROM ingredients")
 	if err != nil {
 		return nil, err
 	}
 
 	for rows.Next() {
-		var n string
-		var p float64
+		var name string
+		var price int
 
-		if err := rows.Scan(&n, &p); err != nil {
+		if err := rows.Scan(&name, &price); err != nil {
 			return nil, err
 		}
-		prices[n] = p
+
+		prices[name] = price
 	}
-	rows.Close()
 
 	return prices, nil
 }
 
+func (db *DB) getStock() (map[string]float64, error) {
+	stock := make(map[string]float64)
+
+	rows, err := db.Query("SELECT ingredients.name, stock.available FROM ingredients JOIN stock ON ingredients.id = stock.ingredient")
+	if err != nil {
+		return nil, err
+	}
+
+	for rows.Next() {
+		var name string
+		var avail float64
+
+		if err := rows.Scan(&name, &avail); err != nil {
+			return nil, err
+		}
+		stock[name] = avail
+	}
+	rows.Close()
+
+	return stock, err
+}
+
 func (in *input) updateAvailability(db *DB) error {
-	inventory, err := db.getInventory()
+	stock, err := db.getStock()
 	if err != nil {
 		return err
 	}
 	var numberedInv []string
 
-	for item := range inventory {
+	for item := range stock {
 		numberedInv = append(numberedInv, item)
 	}
 
+	fmt.Fprintf(in.w, "   stock\tavailable [l]")
 	for i, item := range numberedInv {
-		fmt.Fprintf(in.w, "%d: %s\t%.2f\n", i, item, inventory[item])
+		fmt.Fprintf(in.w, "%d: %s\t%.2f\n", i, item, stock[item])
 	}
 
 	update, err := in.getInt("Which item do you want to update? ")
@@ -387,7 +369,7 @@ func (in *input) updateAvailability(db *DB) error {
 		return err
 	}
 
-	_, err = db.Exec("UPDATE inventory SET available = $1 WHERE name = $2;", avail, numberedInv[update])
+	_, err = db.Exec("UPDATE stock SET available = $1 WHERE ingredient = (SELECT id FROM ingredients WHERE name = $2)", avail, numberedInv[update])
 	if err != nil {
 		return err
 	}
@@ -395,18 +377,14 @@ func (in *input) updateAvailability(db *DB) error {
 }
 
 func (in *input) updatePrice(db *DB) error {
-	inventory, err := db.getInventory()
-	if err != nil {
-		return err
-	}
-	prices, err := db.getInventoryPriceList()
+	prices, err := db.getIngredientPrices()
 	if err != nil {
 		return err
 	}
 
 	var numberedInv []string
 
-	for item := range inventory {
+	for item := range prices {
 		numberedInv = append(numberedInv, item)
 	}
 	fmt.Fprintf(in.w, "   cocktail\tprice\n")
@@ -424,7 +402,7 @@ func (in *input) updatePrice(db *DB) error {
 		return err
 	}
 
-	_, err = db.Exec("UPDATE inventory SET price = $1 WHERE name = $2;", price, numberedInv[update])
+	_, err = db.Exec("UPDATE ingredients SET price = $1 WHERE name = $2;", price, numberedInv[update])
 	if err != nil {
 		return err
 	}
@@ -483,7 +461,7 @@ func (db *DB) getFest(date string) (fest, error) {
 	f := newFest()
 	f.date = date
 
-	rows, err := db.Query("SELECT cocktails, amount, price FROM fests WHERE date = $1", f.date)
+	rows, err := db.Query("SELECT cocktails, amount, price FROM festcocktails WHERE fest = (SELECT id FROM fests WHERE date = $1)", f.date)
 	if err != nil {
 		return newFest(), err
 	}
@@ -511,11 +489,11 @@ func (db *DB) getFest(date string) (fest, error) {
 }
 
 func (in *input) listInventory(db *DB) error {
-	inventory, err := db.getInventory()
+	stock, err := db.getStock()
 	if err != nil {
 		return err
 	}
-	prices, err := db.getInventoryPriceList()
+	prices, err := db.getIngredientPrices()
 	if err != nil {
 		return err
 	}
@@ -523,12 +501,11 @@ func (in *input) listInventory(db *DB) error {
 	fmt.Fprintf(in.w, "number\tingredient\tavailable\tprice\n")
 
 	id := 0
-	for item, val := range inventory {
+	for item, val := range stock {
 		fmt.Fprintf(in.w, "%d\t%s\t%.2f\t%.2f €\n", id, item, val, prices[item]/100)
 		id++
 	}
 
-	in.w.Flush()
 	return nil
 }
 
@@ -537,7 +514,7 @@ func (db *DB) genShoppingList() (shoppinglist map[string]float64, pricelist map[
 	if err != nil {
 		return nil, nil, err
 	}
-	inventory, err := db.getInventory()
+	stock, err := db.getStock()
 	if err != nil {
 		return nil, nil, err
 	}
@@ -554,21 +531,21 @@ func (db *DB) genShoppingList() (shoppinglist map[string]float64, pricelist map[
 		}
 	}
 
-	for z, m := range inventory {
-		shoppinglist[z] -= m
-		if shoppinglist[z] <= 0 {
-			shoppinglist[z] = 0
+	for ing, avail := range stock {
+		shoppinglist[ing] -= avail
+		if shoppinglist[ing] <= 0 {
+			shoppinglist[ing] = 0
 		}
 	}
 
-	prices, err := db.getInventoryPriceList()
+	prices, err := db.getIngredientPrices()
 	if err != nil {
 		return nil, nil, err
 	}
 	pricelist = make(map[string]float64)
 
-	for z, m := range shoppinglist {
-		pricelist[z] = m * prices[z]
+	for ing, need := range shoppinglist {
+		pricelist[ing] = need * float64(prices[ing])
 	}
 
 	return shoppinglist, pricelist, nil
@@ -677,7 +654,7 @@ func (db *DB) festCocktail(name string, price float64, amount int, del bool) err
 	if del == true {
 		for _, c := range fest.cocktails {
 			if c == name {
-				_, err := db.Exec("DELETE FROM fests WHERE cocktails = $1 AND date = $2", id, cfg.Current)
+				_, err := db.Exec("DELETE FROM festcocktails WHERE cocktails = $1 AND fest = (SELECT id FROM fests WHERE date = $2)", id, cfg.Current)
 				if err != nil {
 					return err
 				}
@@ -687,7 +664,7 @@ func (db *DB) festCocktail(name string, price float64, amount int, del bool) err
 	} else {
 		for _, c := range fest.cocktails {
 			if c == name {
-				_, err := db.Exec("UPDATE fests SET price = $1, amount = $2 WHERE cocktails = $3 AND date = $4", price, amount, id, cfg.Current)
+				_, err := db.Exec("UPDATE festcocktails SET price = $1, amount = $2 WHERE cocktails = $3 AND fest = (SELECT id FROM fests WHERE date = $2)", price, amount, id, cfg.Current)
 				if err != nil {
 					return err
 				}
@@ -696,7 +673,7 @@ func (db *DB) festCocktail(name string, price float64, amount int, del bool) err
 		}
 	}
 
-	_, err = db.Exec("INSERT INTO fests (date, cocktails, price, amount) values ($1, $2, $3, $4)", cfg.Current, id, price, amount)
+	_, err = db.Exec("INSERT INTO festcocktails SET cocktail = $1, price = $2, amount = $3, fest = (SELECT id FROM fests WHERE date = $4)", id, price, amount, cfg.Current)
 	if err != nil {
 		return err
 	}
@@ -704,55 +681,27 @@ func (db *DB) festCocktail(name string, price float64, amount int, del bool) err
 }
 
 func (in *input) getInventoryValue(db *DB) error {
-	inventory, err := db.getInventory()
+	stock, err := db.getStock()
 	if err != nil {
 		return err
 	}
-	prices, err := db.getInventoryPriceList()
+	prices, err := db.getIngredientPrices()
 	if err != nil {
 		return err
 	}
 
 	var val float64
 
-	for i, a := range inventory {
-		val += a * prices[i]
+	for i, a := range stock {
+		val += a * float64(prices[i])
 	}
 
 	fmt.Fprintf(in.w, "Current inventory value: %.2f €\n", val/100)
 	return nil
 }
 
-func (in *input) deleteInventory(db *DB) error {
-	inventory, err := db.getInventory()
-	if err != nil {
-		return err
-	}
-	var numberedInv []string
-
-	for item := range inventory {
-		numberedInv = append(numberedInv, item)
-	}
-
-	for i, item := range numberedInv {
-		fmt.Fprintf(in.w, "%d: %s\t%.2f\n", i, item, inventory[item])
-	}
-
-	delete, err := in.getInt("Which item do you want to update? ")
-	if err != nil {
-		return err
-	}
-
-	_, err = db.Exec("DELETE FROM inventory WHERE name = $1 LIMIT 1", numberedInv[delete])
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
 func (in *input) inventoryMenu(db *DB) error {
-	items := []string{"list inventory [l]", "query inventory value [v]", "add item [i]", "change availability[a]", "change price [p]", "delete item [d]", "main Menu [press enter]"}
+	items := []string{"list inventory [l]", "query inventory value [v]", "add item [i]", "change availability[a]", "change price [p]", "main Menu [press enter]"}
 	for _, i := range items {
 		fmt.Fprintf(in.w, "%s\n", i)
 	}
@@ -781,10 +730,6 @@ func (in *input) inventoryMenu(db *DB) error {
 		}
 	case c == "p":
 		if err = in.updatePrice(db); err != nil {
-			return err
-		}
-	case c == "d":
-		if err = in.deleteInventory(db); err != nil {
 			return err
 		}
 	case c == "":
@@ -860,7 +805,7 @@ func (db *DB) updateIngredients(cocktail, ing string, amount float64) error {
 		return err
 	}
 
-	_, err = tx.Exec("UPDATE ingredients SET amount = $1 WHERE cocktail = $2 AND name = $3", amount, id, ing)
+	_, err = tx.Exec("UPDATE cocktailingredients SET amount = $1 WHERE cocktail = $2 AND ingredient = (SELECT id FROM ingredients WHERE name = $3)", amount, id, ing)
 	if err != nil {
 		return err
 	}
@@ -981,61 +926,8 @@ func (in *input) alterIngredients(name string, db *DB) error {
 	return nil
 }
 
-func (in *input) deleteCocktail(db *DB) error {
-	cocktails, err := db.getCocktails()
-
-	fmt.Fprintf(in.w, "Currently available cocktails:\n")
-
-	for i, c := range cocktails {
-		fmt.Fprintf(in.w, "%d %s\n", i, c)
-	}
-
-	id, err := in.getInt("Which cocktail do you want to delete? ")
-	if err != nil {
-		return err
-	}
-
-	err = db.deleteCocktail(cocktails[id].name)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (db *DB) deleteCocktail(name string) error {
-	tx, err := db.Begin()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-
-	var id int
-	err = tx.QueryRow("SELECT id FROM cocktails WHERE name = $1", name).Scan(&id)
-	if err != nil {
-		return err
-	}
-
-	_, err = tx.Exec("DELETE FROM cocktails WHERE name = $1 LIMIT 1", name)
-	if err != nil {
-		return err
-	}
-
-	_, err = tx.Exec("DELETE FROM ingredients WHERE cocktail = $1", id)
-	if err != nil {
-		return err
-	}
-
-	err = tx.Commit()
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
 func (in *input) cocktailMenu(db *DB) error {
-	items := []string{"create cocktail [c]", "list cocktails [l]", "alter cocktail [a]", "delete cocktail [d]", "main Menu [press enter]"}
+	items := []string{"create cocktail [c]", "list cocktails [l]", "alter cocktail [a]", "main Menu [press enter]"}
 	for _, i := range items {
 		fmt.Fprintf(in.w, "%s\n", i)
 	}
@@ -1054,8 +946,6 @@ func (in *input) cocktailMenu(db *DB) error {
 	case c == "a":
 		err = in.alterCocktail(db)
 		return err
-	case c == "d":
-		err = in.deleteCocktail(db)
 	default:
 	}
 	return nil
@@ -1192,14 +1082,13 @@ func createOrOpenDB(database string) (*DB, error) {
 		db := &DB{tmp}
 
 		_, err = os.Stat(cfg.Schema)
-		if os.IsNotExist(err) {
-			if err = db.initDB(); err != nil {
-				return nil, err
-			}
-		} else if err != nil {
+		if err != nil {
 			return nil, err
 		} else {
-			fmt.Println("There is a schema-file included, use it!")
+			err = initDB()
+			if err != nil {
+				return nil, err
+			}
 		}
 
 		return db, nil
